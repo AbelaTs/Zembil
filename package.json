@@ -24,7 +24,7 @@
     "maven",
     "developer-tools"
   ],
-  "author": "Zembil Team",
+  "author": "The Habeshan Nerd",
   "license": "MIT",
   "dependencies": {
     "archiver": "^6.0.1",
