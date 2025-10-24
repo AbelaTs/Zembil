@@ -5,6 +5,7 @@
 ## The Problem
 
 Developers in regions with poor internet infrastructure face:
+
 - Hours of failed `npm install` attempts
 - Inability to access documentation during outages
 - Wasted development time due to connectivity issues
@@ -13,6 +14,7 @@ Developers in regions with poor internet infrastructure face:
 ## The Solution
 
 Zembil allows developers to:
+
 1. **Queue packages** they need during good connectivity periods
 2. **Download and cache** packages with full documentation
 3. **Install instantly** from local cache when offline
@@ -30,6 +32,8 @@ Zembil allows developers to:
 - ⚡ **Power outage resilient**: Graceful handling of interruptions
 
 ## Quick Start
+
+### CLI Usage
 
 ```bash
 # Install Zembil
@@ -50,6 +54,26 @@ zembil sync
 zembil install react express lodash
 ```
 
+### Programmatic Usage
+
+```typescript
+import { Zembil } from 'zembil';
+
+// Initialize Zembil
+const zembil = new Zembil('./cache');
+await zembil.initialize();
+
+// Queue packages
+await zembil.queue.add('react', '18.2.0', 'npm', 10);
+await zembil.queue.add('express', '4.18.0', 'npm', 8);
+
+// Download packages
+await zembil.sync();
+
+// Install from cache
+await zembil.install(['react', 'express']);
+```
+
 ## Architecture
 
 ```
@@ -60,6 +84,29 @@ zembil install react express lodash
 │ • Download docs │    │ • Documentation │    │ • Fast docs     │
 │ • Sync metadata │    │ • Examples       │    │ • No latency    │
 └─────────────────┘    └─────────────────┘    └─────────────────┘
+```
+
+## Documentation
+
+- 📖 [Developer Guide](docs/developer-guide.md) - Complete guide for using Zembil as a library
+- 🔧 [API Reference](docs/api-reference.md) - Complete API documentation
+- 🏗️ [Architecture](docs/architecture.md) - System design and components
+- 🧪 [Testing Guide](docs/testing.md) - How to test Zembil applications
+- 📚 [Basic Usage](examples/basic-usage.md) - CLI usage examples
+- 💻 [Programmatic Usage](examples/programmatic-usage.ts) - Library usage examples
+
+## Installation
+
+### As a CLI Tool
+
+```bash
+npm install -g zembil
+```
+
+### As a Library
+
+```bash
+npm install zembil
 ```
 
 ## License

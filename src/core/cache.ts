@@ -106,7 +106,7 @@ export class Cache implements CacheInterface {
    */
   async remove(packageName: string, version: string): Promise<boolean> {
     const cached = await this.get(packageName, version);
-    if (!cached) return false;
+    if (!cached) return false; 
 
     await fs.remove(cached.localPath);
     if (cached.documentationPath) {
