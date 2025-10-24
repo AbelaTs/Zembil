@@ -43,13 +43,32 @@ jobs:
           npm version ${{ github.event.inputs.version }} --no-git-tag-version
           echo "VERSION=$(node -p "require('./package.json').version")" >> $GITHUB_ENV
       
+      - name: Update version (release trigger)
+        if: github.event_name == 'release'
+        run: |
+          # Extract version from release tag (remove 'v' prefix if present)
+          VERSION=${{ github.event.release.tag_name }}
+          if [[ $VERSION == v* ]]; then
+            VERSION=${VERSION#v}
+          fi
+          npm version $VERSION --no-git-tag-version
+          echo "VERSION=$VERSION" >> $GITHUB_ENV
+      
       - name: Get version
         id: version
         run: |
           if [ "${{ github.event_name }}" = "release" ]; then
-            echo "version=${{ github.event.release.tag_name }}" >> $GITHUB_OUTPUT
+            # Extract version from release tag (remove 'v' prefix if present)
+            VERSION=${{ github.event.release.tag_name }}
+            if [[ $VERSION == v* ]]; then
+              VERSION=${VERSION#v}
+            fi
+            echo "version=$VERSION" >> $GITHUB_OUTPUT
+            echo "VERSION=$VERSION" >> $GITHUB_ENV
           else
-            echo "version=$(node -p "require('./package.json').version")" >> $GITHUB_OUTPUT
+            VERSION=$(node -p "require('./package.json').version")
+            echo "version=$VERSION" >> $GITHUB_OUTPUT
+            echo "VERSION=$VERSION" >> $GITHUB_ENV
           fi
       
       - name: Publish to npm
