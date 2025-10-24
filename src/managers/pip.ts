@@ -18,7 +18,7 @@ export class PipManager implements PackageManagerInterface {
    * @param targetDir - Directory to install the package
    */
   async install(packageName: string, version: string, targetDir: string): Promise<void> {
-    const packageInfo = await this.getPackageInfo(packageName, version);
+    const _packageInfo = await this.getPackageInfo(packageName, version);
     const wheelUrl = await this.getWheelUrl(packageName, version);
     
     const response = await fetch(wheelUrl);
@@ -107,7 +107,7 @@ export class PipManager implements PackageManagerInterface {
    * @param version - Version of the package
    * @returns Empty array (feature not yet implemented)
    */
-  async getExamples(packageName: string, version: string): Promise<string[]> {
+  async getExamples(_packageName: string, _version: string): Promise<string[]> {
     return [];
   }
 

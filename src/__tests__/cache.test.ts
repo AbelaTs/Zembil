@@ -1,5 +1,5 @@
 import { Cache } from '../core/cache';
-import { Database } from '../core/database';
+// import { Database } from '../core/database';
 import { PackageInfo } from '../types';
 import * as fs from 'fs-extra';
 import * as path from 'path';
@@ -78,7 +78,7 @@ describe('Cache', () => {
         description: 'Test package'
       };
 
-      const id = await cache.add(packageInfo, testPackagePath, testDocsPath);
+      const _id = await cache.add(packageInfo, testPackagePath, testDocsPath);
       
       const cached = await cache.get('test-package', '1.0.0');
       expect(cached?.documentationPath).toBeDefined();

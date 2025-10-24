@@ -1,5 +1,5 @@
 import * as sqlite3 from 'sqlite3';
-import * as path from 'path';
+// import * as path from 'path';
 import { CachedPackage } from '../types';
 
 /**

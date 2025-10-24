@@ -1,6 +1,6 @@
 import * as fs from 'fs-extra';
 import * as path from 'path';
-import { QueueInterface, QueueItem, PackageManager, QueueStatus, SyncResult } from '../types';
+import { QueueInterface, QueueItem, PackageManager, SyncResult } from '../types';
 import { PackageManagerFactory } from '../managers';
 import { Cache } from './cache';
 
