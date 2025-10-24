@@ -78,7 +78,7 @@ describe('Cache', () => {
         description: 'Test package'
       };
 
-      const _id = await cache.add(packageInfo, testPackagePath, testDocsPath);
+      await cache.add(packageInfo, testPackagePath, testDocsPath);
       
       const cached = await cache.get('test-package', '1.0.0');
       expect(cached?.documentationPath).toBeDefined();
@@ -93,7 +93,7 @@ describe('Cache', () => {
         description: 'Test package'
       };
 
-      const id = await cache.add(packageInfo, testPackagePath, undefined, testExamplesPath);
+      await cache.add(packageInfo, testPackagePath, undefined, testExamplesPath);
       
       const cached = await cache.get('test-package', '1.0.0');
       expect(cached?.examplesPath).toBeDefined();
@@ -108,7 +108,7 @@ describe('Cache', () => {
         description: 'Test package'
       };
 
-      const id = await cache.add(packageInfo, testPackagePath, testDocsPath, testExamplesPath);
+      await cache.add(packageInfo, testPackagePath, testDocsPath, testExamplesPath);
       
       const cached = await cache.get('test-package', '1.0.0');
       expect(cached?.documentationPath).toBeDefined();
@@ -125,7 +125,7 @@ describe('Cache', () => {
         description: 'Test package'
       };
 
-      const id = await cache.add(packageInfo, testPackagePath, '/non/existent/path');
+      await cache.add(packageInfo, testPackagePath, '/non/existent/path');
       
       const cached = await cache.get('test-package', '1.0.0');
       expect(cached?.documentationPath).toBeNull();

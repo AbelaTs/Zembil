@@ -35,7 +35,7 @@ export class OfflineUtils {
       throw new Error('Invalid offline package: manifest.json not found');
     }
 
-    const _manifest = JSON.parse(await fs.readFile(manifestPath, 'utf8'));
+    const manifest = JSON.parse(await fs.readFile(manifestPath, 'utf8'));
     
     // Copy package files
     const packageFiles = await fs.readdir(packagePath);
@@ -161,7 +161,7 @@ export class OfflineUtils {
         return false;
       }
 
-      const _manifest = JSON.parse(await fs.readFile(manifestPath, 'utf8'));
+      const manifest = JSON.parse(await fs.readFile(manifestPath, 'utf8'));
       
       // Check required fields
       return !!(
@@ -184,7 +184,7 @@ export class OfflineUtils {
   } | null> {
     try {
       const manifestPath = path.join(packagePath, 'manifest.json');
-      const _manifest = JSON.parse(await fs.readFile(manifestPath, 'utf8'));
+      const manifest = JSON.parse(await fs.readFile(manifestPath, 'utf8'));
       
       return {
         name: manifest.name,

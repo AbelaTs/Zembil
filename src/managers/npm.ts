@@ -19,7 +19,7 @@ export class NpmManager implements PackageManagerInterface {
    * @param targetDir - Directory to install the package
    */
   async install(packageName: string, version: string, targetDir: string): Promise<void> {
-    const _packageInfo = await this.getPackageInfo(packageName, version);
+    await this.getPackageInfo(packageName, version);
     const tarballUrl = await this.getTarballUrl(packageName, version);
     
     const response = await fetch(tarballUrl);
@@ -97,7 +97,7 @@ export class NpmManager implements PackageManagerInterface {
    * @returns Package documentation as markdown string
    */
   async getDocumentation(packageName: string, version: string): Promise<string> {
-    const _packageInfo = await this.getPackageInfo(packageName, version);
+    await this.getPackageInfo(packageName, version);
     
     const response = await fetch(`${this.registryUrl}/${packageName}/${version}`);
     if (!response.ok) {

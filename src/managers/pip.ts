@@ -18,7 +18,7 @@ export class PipManager implements PackageManagerInterface {
    * @param targetDir - Directory to install the package
    */
   async install(packageName: string, version: string, targetDir: string): Promise<void> {
-    const _packageInfo = await this.getPackageInfo(packageName, version);
+    await this.getPackageInfo(packageName, version);
     const wheelUrl = await this.getWheelUrl(packageName, version);
     
     const response = await fetch(wheelUrl);

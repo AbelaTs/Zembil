@@ -18,7 +18,7 @@ export class MavenManager implements PackageManagerInterface {
    * @param targetDir - Directory to install the package
    */
   async install(packageName: string, version: string, targetDir: string): Promise<void> {
-    const _packageInfo = await this.getPackageInfo(packageName, version);
+    await this.getPackageInfo(packageName, version);
     const jarUrl = await this.getJarUrl(packageName, version);
     
     const response = await fetch(jarUrl);
@@ -151,7 +151,7 @@ export class MavenManager implements PackageManagerInterface {
    * @returns JAR download URL
    */
   private async getJarUrl(packageName: string, version: string): Promise<string> {
-    const [groupId, artifactId] = packageName.split(':');
+    const [, artifactId] = packageName.split(':');
     const mavenPath = this.getMavenPath(packageName);
     return `${this.mavenCentralUrl}/${mavenPath}/${artifactId}-${version}.jar`;
   }
