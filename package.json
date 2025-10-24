@@ -26,6 +26,22 @@
   ],
   "author": "The Habeshan Nerd",
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/AbelaTs/Zembil.git"
+  },
+  "homepage": "https://github.com/AbelaTs/Zembil#readme",
+  "bugs": {
+    "url": "https://github.com/AbelaTs/Zembil/issues"
+  },
+  "files": [
+    "dist/**/*",
+    "README.md",
+    "LICENSE"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
   "dependencies": {
     "archiver": "^6.0.1",
     "chalk": "^4.1.2",
