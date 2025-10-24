@@ -1,0 +1,26 @@
+# Global owners
+* @AbelaTs
+
+# Core source code
+/src/ @AbelaTs
+/src/core/ @AbelaTs
+/src/managers/ @AbelaTs
+/src/utils/ @AbelaTs
+/src/types/ @AbelaTs
+
+# Documentation
+/docs/ @AbelaTs
+*.md @AbelaTs
+
+# Configuration files
+package.json @AbelaTs
+tsconfig.json @AbelaTs
+jest.config.js @AbelaTs
+
+# Tests
+/src/__tests__/ @AbelaTs
+*.test.ts @AbelaTs
+*.test.js @AbelaTs
+
+# Examples
+/examples/ @AbelaTs
