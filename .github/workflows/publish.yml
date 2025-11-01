@@ -51,7 +51,11 @@ jobs:
           if [[ $VERSION == v* ]]; then
             VERSION=${VERSION#v}
           fi
-          npm version $VERSION --no-git-tag-version
+          # Only update if version is different
+          CURRENT_VERSION=$(node -p "require('./package.json').version")
+          if [ "$CURRENT_VERSION" != "$VERSION" ]; then
+            npm version $VERSION --no-git-tag-version
+          fi
           echo "VERSION=$VERSION" >> $GITHUB_ENV
       
       - name: Get version
