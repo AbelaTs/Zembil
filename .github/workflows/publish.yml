@@ -51,10 +51,12 @@ jobs:
           if [[ $VERSION == v* ]]; then
             VERSION=${VERSION#v}
           fi
-          # Only update if version is different
+          # Only update if version is different (allow failure if version unchanged)
           CURRENT_VERSION=$(node -p "require('./package.json').version")
           if [ "$CURRENT_VERSION" != "$VERSION" ]; then
-            npm version $VERSION --no-git-tag-version
+            npm version $VERSION --no-git-tag-version || echo "Version already matches, continuing..."
+          else
+            echo "Version already matches release tag ($VERSION), skipping update"
           fi
           echo "VERSION=$VERSION" >> $GITHUB_ENV
       
