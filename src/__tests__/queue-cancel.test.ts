@@ -27,9 +27,9 @@ describe('Queue Cancel', () => {
   });
 
   it('should cancel a package by name', async () => {
-    const id1 = await queue.add('test-package', '1.0.0', 'npm', 0);
-    const id2 = await queue.add('other-package', '2.0.0', 'npm', 0);
-    const id3 = await queue.add('test-package', '1.1.0', 'npm', 0);
+    await queue.add('test-package', '1.0.0', 'npm', 0);
+    await queue.add('other-package', '2.0.0', 'npm', 0);
+    await queue.add('test-package', '1.1.0', 'npm', 0);
 
     const cancelled = await queue.cancel('test-package');
     expect(cancelled).toBe(2);
@@ -63,8 +63,8 @@ describe('Queue Cancel', () => {
   });
 
   it('should cancel all pending downloads', async () => {
-    const id1 = await queue.add('package1', '1.0.0', 'npm', 0);
-    const id2 = await queue.add('package2', '2.0.0', 'npm', 0);
+    await queue.add('package1', '1.0.0', 'npm', 0);
+    await queue.add('package2', '2.0.0', 'npm', 0);
     
     // Manually set status to completed for one item
     const items = await queue.list();

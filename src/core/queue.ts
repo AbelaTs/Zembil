@@ -351,68 +351,61 @@ export class Queue implements QueueInterface {
       throw new Error('Paused');
     }
 
-    try {
-      const manager = PackageManagerFactory.getManager(item.manager);
-      
-      const packageInfo = await manager.getPackageInfo(item.packageName, item.version);
-      
-      // Download with progress tracking - automatically saves progress
-      const progressCallback = (downloaded: number, total: number) => {
-        item.progress = {
-          downloaded,
-          total,
-          percentage: total > 0 ? Math.round((downloaded / total) * 100) : 0
-        };
-        // Update progress periodically (every 5% or 1MB) - automatically saved
-        if (item.progress.percentage % 5 === 0 || downloaded % (1024 * 1024) === 0) {
-          this.updateItem(item).catch(() => {
-            // Ignore update errors - progress will be saved on interruption
-          });
-        }
+    const manager = PackageManagerFactory.getManager(item.manager);
+    
+    const packageInfo = await manager.getPackageInfo(item.packageName, item.version);
+    
+    // Download with progress tracking - automatically saves progress
+    const progressCallback = (downloaded: number, total: number) => {
+      item.progress = {
+        downloaded,
+        total,
+        percentage: total > 0 ? Math.round((downloaded / total) * 100) : 0
       };
-      
-      const packagePath = await manager.downloadPackage(item.packageName, item.version, progressCallback);
-      
-      // Progress is automatically saved during download
-      // If interrupted, it will be caught and progress preserved
-      
-      let docsPath: string | undefined;
-      try {
-        const docs = await manager.getDocumentation(item.packageName, item.version);
-        if (docs) {
-          docsPath = path.join(process.cwd(), 'temp', `${item.id}-docs.md`);
-          await fs.ensureDir(path.dirname(docsPath));
-          await fs.writeFile(docsPath, docs);
-        }
-      } catch (error) {
-        console.warn(`Failed to get documentation for ${item.packageName}:`, error);
+      // Update progress periodically (every 5% or 1MB) - automatically saved
+      if (item.progress.percentage % 5 === 0 || downloaded % (1024 * 1024) === 0) {
+        this.updateItem(item).catch(() => {
+          // Ignore update errors - progress will be saved on interruption
+        });
       }
-
-      let examplesPath: string | undefined;
-      try {
-        const examples = await manager.getExamples(item.packageName, item.version);
-        if (examples.length > 0) {
-          examplesPath = path.join(process.cwd(), 'temp', `${item.id}-examples`);
-          await fs.ensureDir(examplesPath);
-          for (let i = 0; i < examples.length; i++) {
-            await fs.writeFile(path.join(examplesPath, `example-${i}.md`), examples[i]);
-          }
-        }
-      } catch (error) {
-        console.warn(`Failed to get examples for ${item.packageName}:`, error);
+    };
+    
+    const packagePath = await manager.downloadPackage(item.packageName, item.version, progressCallback);
+    
+    // Progress is automatically saved during download
+    // If interrupted, it will be caught and progress preserved
+    
+    let docsPath: string | undefined;
+    try {
+      const docs = await manager.getDocumentation(item.packageName, item.version);
+      if (docs) {
+        docsPath = path.join(process.cwd(), 'temp', `${item.id}-docs.md`);
+        await fs.ensureDir(path.dirname(docsPath));
+        await fs.writeFile(docsPath, docs);
       }
-
-      await this.cache.add(packageInfo, packagePath, docsPath, examplesPath);
-      
-      await fs.remove(packagePath);
-      if (docsPath) await fs.remove(docsPath);
-      if (examplesPath) await fs.remove(examplesPath);
-      
     } catch (error) {
-      // Progress is already saved, so interruption is automatically tracked
-      // Error will be handled by the outer catch block
-      throw error;
+      console.warn(`Failed to get documentation for ${item.packageName}:`, error);
     }
+
+    let examplesPath: string | undefined;
+    try {
+      const examples = await manager.getExamples(item.packageName, item.version);
+      if (examples.length > 0) {
+        examplesPath = path.join(process.cwd(), 'temp', `${item.id}-examples`);
+        await fs.ensureDir(examplesPath);
+        for (let i = 0; i < examples.length; i++) {
+          await fs.writeFile(path.join(examplesPath, `example-${i}.md`), examples[i]);
+        }
+      }
+    } catch (error) {
+      console.warn(`Failed to get examples for ${item.packageName}:`, error);
+    }
+
+    await this.cache.add(packageInfo, packagePath, docsPath, examplesPath);
+    
+    await fs.remove(packagePath);
+    if (docsPath) await fs.remove(docsPath);
+    if (examplesPath) await fs.remove(examplesPath);
   }
 
   /**
