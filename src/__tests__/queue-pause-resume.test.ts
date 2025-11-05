@@ -232,7 +232,7 @@ describe('Queue Pause/Resume', () => {
       await queue.pause();
       
       // Process should not download anything when paused
-      const result = await queue.process();
+      await queue.process();
       
       // Items should remain pending or be marked as paused
       const items = await queue.list();
