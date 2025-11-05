@@ -31,6 +31,21 @@ zembil queue add "org.springframework:spring-boot-starter-web@3.1.0" -m maven
 
 ```bash
 # Download all queued packages with documentation
+# Shows real-time progress:
+# ⬇️  react@18.2.0: [████████░░░░░░░░░░░░] 45% (2.3MB / 5.1MB)
+zembil sync
+
+# If you need to pause (e.g., internet becomes unstable)
+# In another terminal:
+zembil queue pause
+
+# Check current progress
+zembil queue list
+# ⏸️ react@18.2.0 (npm)
+#    Progress: [████████░░░░░░░░░░░░] 45% (2.3MB / 5.1MB)
+
+# Resume when internet is stable again
+zembil queue resume
 zembil sync
 
 # Check what was downloaded
@@ -68,6 +83,31 @@ zembil queue add lodash@4.17.21 -p 1
 
 # Check queue status
 zembil queue status
+```
+
+### Pause/Resume Downloads
+
+```bash
+# Start downloading
+zembil sync
+
+# Pause downloads (useful when internet becomes unstable)
+zembil queue pause
+
+# Check what's paused and progress
+zembil queue list
+# Shows:
+# ⏸️ react@18.2.0 (npm) - Paused at 45%
+#    Progress: [████████░░░░░░░░░░░░] 45% (2.3MB / 5.1MB)
+# ⏳ express@4.18.0 (npm) - Pending
+
+# Resume when ready
+zembil queue resume
+zembil sync
+
+# Check if queue is paused
+zembil queue status
+# Shows paused count if any
 ```
 
 ### Cache Management
@@ -115,14 +155,47 @@ zembil bundle extract team-packages.zip ./offline-cache
 - Cache status indicators
 - One-click offline installation
 
+## Pause/Resume & Progress Tracking
+
+### Manual Control
+
+Zembil provides manual pause/resume control:
+
+```bash
+# Start sync with progress tracking
+zembil sync
+# Real-time progress: ⬇️  react@18.2.0: [████████░░░░░░░░░░░░] 45%
+
+# Pause anytime (in another terminal or Ctrl+C)
+zembil queue pause
+
+# Progress is saved - check it later
+zembil queue list
+# ⏸️ react@18.2.0 (npm)
+#    Progress: [████████░░░░░░░░░░░░] 45% (2.3MB / 5.1MB)
+
+# Resume when ready
+zembil queue resume
+zembil sync  # Continues from where it left off
+```
+
+### Progress Persistence
+
+Progress is saved to `queue.json`:
+- Survives restarts
+- Can check progress anytime
+- Shows MB downloaded/total
+- Visual progress bars
+
 ## Power Outage Resilience
 
 ### Automatic Recovery
 
 Zembil automatically handles:
-- Interrupted downloads (resume on reconnection)
+- Interrupted downloads (can pause/resume manually)
 - Corrupted cache files (automatic cleanup)
 - Partial installations (rollback and retry)
+- Progress tracking (survives restarts)
 
 ### Manual Recovery
 

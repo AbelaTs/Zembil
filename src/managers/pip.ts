@@ -2,6 +2,7 @@ import * as fs from 'fs-extra';
 import * as path from 'path';
 import fetch from 'node-fetch';
 import { PackageManagerInterface, PackageInfo } from '../types';
+import { NetworkUtils } from '../utils/network';
 
 /**
  * Pip package manager implementation for downloading and installing Python packages.
@@ -65,17 +66,23 @@ export class PipManager implements PackageManagerInterface {
    * Downloads a Python package wheel to a temporary location.
    * @param packageName - Name of the package
    * @param version - Version of the package
+   * @param onProgress - Optional progress callback (downloaded bytes, total bytes)
    * @returns Path to the downloaded wheel file
    */
-  async downloadPackage(packageName: string, version: string): Promise<string> {
+  async downloadPackage(packageName: string, version: string, onProgress?: (downloaded: number, total: number) => void): Promise<string> {
     const wheelUrl = await this.getWheelUrl(packageName, version);
-    const response = await fetch(wheelUrl);
     
-    if (!response.ok) {
-      throw new Error(`Failed to download package: ${response.statusText}`);
+    let buffer: Buffer;
+    if (onProgress) {
+      buffer = await NetworkUtils.downloadWithProgress(wheelUrl, onProgress);
+    } else {
+      const response = await fetch(wheelUrl);
+      if (!response.ok) {
+        throw new Error(`Failed to download package: ${response.statusText}`);
+      }
+      buffer = await response.buffer();
     }
 
-    const buffer = await response.buffer();
     const tempPath = path.join(process.cwd(), 'temp', `${packageName}-${version}.whl`);
     await fs.ensureDir(path.dirname(tempPath));
     await fs.writeFile(tempPath, buffer);

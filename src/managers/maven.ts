@@ -2,6 +2,7 @@ import * as fs from 'fs-extra';
 import * as path from 'path';
 import fetch from 'node-fetch';
 import { PackageManagerInterface, PackageInfo } from '../types';
+import { NetworkUtils } from '../utils/network';
 
 /**
  * Maven package manager implementation for downloading and installing Java packages.
@@ -72,17 +73,23 @@ export class MavenManager implements PackageManagerInterface {
    * Downloads a Maven JAR to a temporary location.
    * @param packageName - Maven coordinates (groupId:artifactId)
    * @param version - Version of the package
+   * @param onProgress - Optional progress callback (downloaded bytes, total bytes)
    * @returns Path to the downloaded JAR file
    */
-  async downloadPackage(packageName: string, version: string): Promise<string> {
+  async downloadPackage(packageName: string, version: string, onProgress?: (downloaded: number, total: number) => void): Promise<string> {
     const jarUrl = await this.getJarUrl(packageName, version);
-    const response = await fetch(jarUrl);
     
-    if (!response.ok) {
-      throw new Error(`Failed to download package: ${response.statusText}`);
+    let buffer: Buffer;
+    if (onProgress) {
+      buffer = await NetworkUtils.downloadWithProgress(jarUrl, onProgress);
+    } else {
+      const response = await fetch(jarUrl);
+      if (!response.ok) {
+        throw new Error(`Failed to download package: ${response.statusText}`);
+      }
+      buffer = await response.buffer();
     }
 
-    const buffer = await response.buffer();
     const tempPath = path.join(process.cwd(), 'temp', `${packageName.replace(':', '-')}-${version}.jar`);
     await fs.ensureDir(path.dirname(tempPath));
     await fs.writeFile(tempPath, buffer);

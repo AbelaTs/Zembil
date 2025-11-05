@@ -11,6 +11,8 @@ import { Cache } from './cache';
 export class Queue implements QueueInterface {
   private queueFile: string;
   private cache: Cache;
+  private isPausedFlag: boolean = false;
+  private currentItem: QueueItem | null = null;
 
   /**
    * Creates a new Queue instance.
@@ -100,11 +102,15 @@ export class Queue implements QueueInterface {
   /**
    * Processes all pending items in the queue.
    * Downloads packages and stores them in the cache.
+   * Supports pause/resume functionality.
    * @returns Sync result with download statistics
    */
   async process(): Promise<SyncResult> {
+    // Resume paused items if any
+    await this.resumePausedItems();
+    
     const queue = await this.loadQueue();
-    const pendingItems = queue.filter(item => item.status === 'pending');
+    const pendingItems = queue.filter(item => item.status === 'pending' || item.status === 'paused');
     
     const result: SyncResult = {
       success: true,
@@ -115,23 +121,41 @@ export class Queue implements QueueInterface {
     };
 
     for (const item of pendingItems) {
+      // Check if paused
+      if (this.isPausedFlag) {
+        item.status = 'paused';
+        await this.updateItem(item);
+        continue;
+      }
+
+      this.currentItem = item;
       try {
         await this.processItem(item);
         result.downloaded++;
         
         item.status = 'completed';
+        item.progress = undefined; // Clear progress on completion
         await this.saveQueue(queue);
         
       } catch (error) {
+        // If paused during download, mark as paused instead of failed
+        if (this.isPausedFlag) {
+          item.status = 'paused';
+          await this.updateItem(item);
+          continue;
+        }
+        
         console.error(`Failed to process ${item.packageName}@${item.version}:`, error);
         item.status = 'failed';
         item.error = error instanceof Error ? error.message : String(error);
+        item.progress = undefined;
         result.failed++;
         result.errors.push(`${item.packageName}@${item.version}: ${item.error}`);
         await this.saveQueue(queue);
       }
     }
 
+    this.currentItem = null;
     result.success = result.failed === 0;
     return result;
   }
@@ -147,14 +171,66 @@ export class Queue implements QueueInterface {
    * Gets the current status of the queue.
    * @returns Queue status with counts for each state
    */
-  async getStatus(): Promise<{ pending: number; downloading: number; completed: number; failed: number }> {
+  async getStatus(): Promise<{ pending: number; downloading: number; completed: number; failed: number; paused: number }> {
     const queue = await this.loadQueue();
     return {
       pending: queue.filter(item => item.status === 'pending').length,
       downloading: queue.filter(item => item.status === 'downloading').length,
       completed: queue.filter(item => item.status === 'completed').length,
-      failed: queue.filter(item => item.status === 'failed').length
+      failed: queue.filter(item => item.status === 'failed').length,
+      paused: queue.filter(item => item.status === 'paused').length
     };
+  }
+
+  /**
+   * Pauses the queue processing.
+   * Current download will be marked as paused and can be resumed later.
+   */
+  async pause(): Promise<void> {
+    this.isPausedFlag = true;
+    
+    // Mark current item as paused if downloading
+    if (this.currentItem && this.currentItem.status === 'downloading') {
+      this.currentItem.status = 'paused';
+      await this.updateItem(this.currentItem);
+    }
+  }
+
+  /**
+   * Resumes the queue processing.
+   * Paused items will be reset to pending status.
+   */
+  async resume(): Promise<void> {
+    this.isPausedFlag = false;
+    await this.resumePausedItems();
+  }
+
+  /**
+   * Checks if the queue is currently paused.
+   * @returns True if paused, false otherwise
+   */
+  async isPaused(): Promise<boolean> {
+    return this.isPausedFlag;
+  }
+
+  /**
+   * Resumes all paused items by resetting them to pending.
+   */
+  private async resumePausedItems(): Promise<void> {
+    const queue = await this.loadQueue();
+    let updated = false;
+    
+    for (const item of queue) {
+      if (item.status === 'paused') {
+        item.status = 'pending';
+        // Keep progress information for display
+        updated = true;
+      }
+    }
+    
+    if (updated) {
+      await this.saveQueue(queue);
+    }
   }
 
   /**
@@ -163,13 +239,37 @@ export class Queue implements QueueInterface {
    */
   private async processItem(item: QueueItem): Promise<void> {
     item.status = 'downloading';
+    item.progress = { downloaded: 0, total: 0, percentage: 0 };
     await this.updateItem(item);
 
     try {
       const manager = PackageManagerFactory.getManager(item.manager);
       
       const packageInfo = await manager.getPackageInfo(item.packageName, item.version);
-      const packagePath = await manager.downloadPackage(item.packageName, item.version);
+      
+      // Download with progress tracking
+      const progressCallback = (downloaded: number, total: number) => {
+        if (!this.isPausedFlag) {
+          item.progress = {
+            downloaded,
+            total,
+            percentage: total > 0 ? Math.round((downloaded / total) * 100) : 0
+          };
+          // Update progress periodically (every 5% or 1MB)
+          if (item.progress.percentage % 5 === 0 || downloaded % (1024 * 1024) === 0) {
+            this.updateItem(item).catch(() => {
+              // Ignore update errors
+            });
+          }
+        }
+      };
+      
+      const packagePath = await manager.downloadPackage(item.packageName, item.version, progressCallback);
+      
+      // Check if paused during download
+      if (this.isPausedFlag) {
+        throw new Error('Download paused by user');
+      }
       
       let docsPath: string | undefined;
       try {
@@ -204,9 +304,13 @@ export class Queue implements QueueInterface {
       if (examplesPath) await fs.remove(examplesPath);
       
     } catch (error) {
-      item.status = 'failed';
-      item.error = error instanceof Error ? error.message : String(error);
-      await this.updateItem(item);
+      // Don't mark as failed if it was paused
+      if (!this.isPausedFlag) {
+        item.status = 'failed';
+        item.error = error instanceof Error ? error.message : String(error);
+        item.progress = undefined;
+        await this.updateItem(item);
+      }
       throw error;
     }
   }
@@ -234,7 +338,12 @@ export class Queue implements QueueInterface {
       const queue = JSON.parse(data);
       return queue.map((item: any) => ({
         ...item,
-        queuedAt: new Date(item.queuedAt)
+        queuedAt: new Date(item.queuedAt),
+        progress: item.progress ? {
+          downloaded: item.progress.downloaded || 0,
+          total: item.progress.total || 0,
+          percentage: item.progress.percentage || 0
+        } : undefined
       }));
     } catch (error) {
       return [];

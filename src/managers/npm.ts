@@ -3,6 +3,7 @@ import * as path from 'path';
 import * as tar from 'tar';
 import fetch from 'node-fetch';
 import { PackageManagerInterface, PackageInfo } from '../types';
+import { NetworkUtils } from '../utils/network';
 
 /**
  * NPM package manager implementation for downloading and installing Node.js packages.
@@ -72,17 +73,25 @@ export class NpmManager implements PackageManagerInterface {
    * Downloads a package tarball to a temporary location.
    * @param packageName - Name of the package
    * @param version - Version of the package
+   * @param onProgress - Optional progress callback (downloaded bytes, total bytes)
    * @returns Path to the downloaded tarball
    */
-  async downloadPackage(packageName: string, version: string): Promise<string> {
+  async downloadPackage(packageName: string, version: string, onProgress?: (downloaded: number, total: number) => void): Promise<string> {
     const tarballUrl = await this.getTarballUrl(packageName, version);
-    const response = await fetch(tarballUrl);
     
-    if (!response.ok) {
-      throw new Error(`Failed to download package: ${response.statusText}`);
+    let buffer: Buffer;
+    if (onProgress) {
+      // Use progress tracking
+      buffer = await NetworkUtils.downloadWithProgress(tarballUrl, onProgress);
+    } else {
+      // Fallback to simple download
+      const response = await fetch(tarballUrl);
+      if (!response.ok) {
+        throw new Error(`Failed to download package: ${response.statusText}`);
+      }
+      buffer = await response.buffer();
     }
 
-    const buffer = await response.buffer();
     const tempPath = path.join(process.cwd(), 'temp', `${packageName}-${version}.tgz`);
     await fs.ensureDir(path.dirname(tempPath));
     await fs.writeFile(tempPath, buffer);

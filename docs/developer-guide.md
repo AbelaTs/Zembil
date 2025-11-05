@@ -135,7 +135,45 @@ Lists all queued packages.
 
 #### `zembil.queue.getStatus(): Promise<QueueStatus>`
 
-Gets queue status information.
+Gets queue status information including paused count.
+
+```typescript
+const status = await zembil.queue.getStatus();
+console.log(`Pending: ${status.pending}`);
+console.log(`Paused: ${status.paused}`);
+console.log(`Downloading: ${status.downloading}`);
+console.log(`Completed: ${status.completed}`);
+console.log(`Failed: ${status.failed}`);
+```
+
+#### `zembil.queue.pause(): Promise<void>`
+
+Pauses queue processing. Current download will be marked as paused and can be resumed later.
+
+```typescript
+await zembil.queue.pause();
+console.log('Queue paused');
+```
+
+#### `zembil.queue.resume(): Promise<void>`
+
+Resumes paused queue processing. Paused items will be reset to pending status.
+
+```typescript
+await zembil.queue.resume();
+console.log('Queue resumed');
+```
+
+#### `zembil.queue.isPaused(): Promise<boolean>`
+
+Checks if the queue is currently paused.
+
+```typescript
+const isPaused = await zembil.queue.isPaused();
+if (isPaused) {
+  console.log('Queue is paused');
+}
+```
 
 ```typescript
 interface QueueStatus {
@@ -215,6 +253,40 @@ class CustomPackageManager implements PackageManager {
 
 // Register custom manager
 zembil.registerManager('custom', new CustomPackageManager());
+```
+
+### Pause/Resume Control
+
+```typescript
+// Pause downloads
+await zembil.queue.pause();
+
+// Check if paused
+const isPaused = await zembil.queue.isPaused();
+console.log(`Queue paused: ${isPaused}`);
+
+// Resume downloads
+await zembil.queue.resume();
+await zembil.sync(); // Continue syncing
+```
+
+### Progress Tracking
+
+```typescript
+// Get queue items with progress
+const items = await zembil.queue.list();
+items.forEach(item => {
+  if (item.progress) {
+    console.log(`${item.packageName}: ${item.progress.percentage}%`);
+    console.log(`  Downloaded: ${item.progress.downloaded} bytes`);
+    console.log(`  Total: ${item.progress.total} bytes`);
+  }
+});
+
+// Check status including paused items
+const status = await zembil.queue.getStatus();
+console.log(`Paused: ${status.paused}`);
+console.log(`Downloading: ${status.downloading}`);
 ```
 
 ### Event Handling
@@ -397,7 +469,7 @@ if (stats.totalSize > 4 * 1024 * 1024 * 1024) {
 // Check if package is available offline first
 if (await zembil.cache.exists('react', '18.2.0')) {
   // Install from cache
-  await zembil.install(['react']);
+  await zembil.install('react', './node_modules');
 } else {
   // Queue for download when online
   await zembil.queue.add('react', '18.2.0', 'npm');
@@ -405,7 +477,35 @@ if (await zembil.cache.exists('react', '18.2.0')) {
 }
 ```
 
-### 4. Batch Operations
+### 4. Pause/Resume Workflow
+
+```typescript
+// Start downloading
+const syncPromise = zembil.sync();
+
+// Monitor progress
+const interval = setInterval(async () => {
+  const items = await zembil.queue.list();
+  const downloading = items.find(item => item.status === 'downloading');
+  if (downloading?.progress) {
+    console.log(`${downloading.packageName}: ${downloading.progress.percentage}%`);
+  }
+}, 1000);
+
+// Pause if needed (e.g., internet becomes unstable)
+if (internetIsUnstable()) {
+  await zembil.queue.pause();
+  clearInterval(interval);
+}
+
+// Resume when ready
+if (internetIsStable()) {
+  await zembil.queue.resume();
+  await zembil.sync();
+}
+```
+
+### 5. Batch Operations
 
 ```typescript
 // Queue multiple packages efficiently

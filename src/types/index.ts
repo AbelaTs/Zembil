@@ -30,6 +30,11 @@ export interface QueueItem {
   queuedAt: Date;
   status: QueueStatus;
   error?: string;
+  progress?: {
+    downloaded: number;
+    total: number;
+    percentage: number;
+  };
 }
 
 export interface CacheConfig {
@@ -51,13 +56,13 @@ export interface SyncResult {
 }
 
 export type PackageManager = 'npm' | 'pip' | 'maven' | 'composer' | 'cargo' | 'go';
-export type QueueStatus = 'pending' | 'downloading' | 'completed' | 'failed' | 'cancelled';
+export type QueueStatus = 'pending' | 'downloading' | 'completed' | 'failed' | 'cancelled' | 'paused';
 
 export interface PackageManagerInterface {
   name: PackageManager;
   install(packageName: string, version: string, targetDir: string): Promise<void>;
   getPackageInfo(packageName: string, version: string): Promise<PackageInfo>;
-  downloadPackage(packageName: string, version: string): Promise<string>;
+  downloadPackage(packageName: string, version: string, onProgress?: (downloaded: number, total: number) => void): Promise<string>;
   getDocumentation(packageName: string, version: string): Promise<string>;
   getExamples(packageName: string, version: string): Promise<string[]>;
   listVersions(packageName: string): Promise<string[]>;
@@ -79,5 +84,8 @@ export interface QueueInterface {
   list(): Promise<QueueItem[]>;
   process(): Promise<SyncResult>;
   clear(): Promise<void>;
-  getStatus(): Promise<{ pending: number; downloading: number; completed: number; failed: number }>;
+  getStatus(): Promise<{ pending: number; downloading: number; completed: number; failed: number; paused: number }>;
+  pause(): Promise<void>;
+  resume(): Promise<void>;
+  isPaused(): Promise<boolean>;
 }

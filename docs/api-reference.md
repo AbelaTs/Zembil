@@ -92,11 +92,12 @@ class Queue {
 
   // Status
   getStatus(): Promise<QueueStatus>;
+  isPaused(): Promise<boolean>;
 
   // Processing
   process(): Promise<void>;
-  pause(): void;
-  resume(): void;
+  pause(): Promise<void>;
+  resume(): Promise<void>;
 }
 ```
 
@@ -213,12 +214,17 @@ interface QueueItem {
   version: string;
   manager: string;
   priority: number;
-  status: 'pending' | 'downloading' | 'completed' | 'failed';
+  status: 'pending' | 'downloading' | 'completed' | 'failed' | 'paused' | 'cancelled';
   createdAt: Date;
   startedAt?: Date;
   completedAt?: Date;
   error?: string;
-  retryCount: number;
+  progress?: {
+    downloaded: number;
+    total: number;
+    percentage: number;
+  };
+  retryCount?: number;
 }
 ```
 
@@ -230,6 +236,7 @@ interface QueueStatus {
   downloading: number;
   completed: number;
   failed: number;
+  paused: number;
 }
 ```
 
