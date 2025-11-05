@@ -67,6 +67,8 @@ class Cache implements CacheInterface {
   // Cache management
   getSize(): Promise<number>;
   cleanup(): Promise<void>;
+  cleanAll(): Promise<number>;
+  cleanPackage(packageName: string): Promise<number>;
 
   // Initialization
   initialize(): Promise<void>;
@@ -89,6 +91,10 @@ class Queue {
   remove(id: string): Promise<boolean>;
   list(): Promise<QueueItem[]>;
   clear(): Promise<void>;
+
+  // Cancellation
+  cancel(packageName: string, version?: string): Promise<number>;
+  cancelAll(): Promise<number>;
 
   // Status
   getStatus(): Promise<QueueStatus>;
@@ -145,6 +151,8 @@ interface CacheInterface {
   list(): Promise<CachedPackage[]>;
   getSize(): Promise<number>;
   cleanup(): Promise<void>;
+  cleanAll(): Promise<number>;
+  cleanPackage(packageName: string): Promise<number>;
   initialize(): Promise<void>;
 }
 ```

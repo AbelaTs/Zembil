@@ -146,33 +146,38 @@ console.log(`Completed: ${status.completed}`);
 console.log(`Failed: ${status.failed}`);
 ```
 
-#### `zembil.queue.pause(): Promise<void>`
-
-Pauses queue processing. Current download will be marked as paused and can be resumed later.
-
-```typescript
-await zembil.queue.pause();
-console.log('Queue paused');
-```
-
 #### `zembil.queue.resume(): Promise<void>`
 
-Resumes paused queue processing. Paused items will be reset to pending status.
+Retries interrupted downloads. Interruptions are automatically tracked - use this to explicitly mark interrupted items for retry.
 
 ```typescript
 await zembil.queue.resume();
-console.log('Queue resumed');
+console.log('Interrupted downloads ready to retry');
 ```
 
-#### `zembil.queue.isPaused(): Promise<boolean>`
+**Note:** Interruptions (network errors, Ctrl+C, etc.) are automatically tracked. Progress is saved automatically. You can just run `sync()` again to retry, or use `resume()` to explicitly mark items for retry.
 
-Checks if the queue is currently paused.
+#### `zembil.queue.cancel(packageName: string, version?: string): Promise<number>`
+
+Cancels a package from the queue by name. Returns the number of packages cancelled.
 
 ```typescript
-const isPaused = await zembil.queue.isPaused();
-if (isPaused) {
-  console.log('Queue is paused');
-}
+// Cancel all versions of a package
+const count = await zembil.queue.cancel('react');
+console.log(`Cancelled ${count} package(s)`);
+
+// Cancel specific version
+const count = await zembil.queue.cancel('react', '18.2.0');
+console.log(`Cancelled ${count} package(s)`);
+```
+
+#### `zembil.queue.cancelAll(): Promise<number>`
+
+Cancels all pending/interrupted downloads. Preserves completed and failed items. Returns the number of packages cancelled.
+
+```typescript
+const count = await zembil.queue.cancelAll();
+console.log(`Cancelled ${count} pending package(s)`);
 ```
 
 ```typescript
@@ -181,6 +186,7 @@ interface QueueStatus {
   downloading: number;
   completed: number;
   failed: number;
+  paused: number;
 }
 ```
 
@@ -209,6 +215,24 @@ Gets total cache size in bytes.
 #### `zembil.cache.cleanup(): Promise<void>`
 
 Cleans up orphaned files.
+
+#### `zembil.cache.cleanAll(): Promise<number>`
+
+Removes all packages from cache. Returns the number of packages removed.
+
+```typescript
+const count = await zembil.cache.cleanAll();
+console.log(`Cleaned ${count} package(s) from cache`);
+```
+
+#### `zembil.cache.cleanPackage(packageName: string): Promise<number>`
+
+Removes all versions of a specific package from cache. Returns the number of versions removed.
+
+```typescript
+const count = await zembil.cache.cleanPackage('react');
+console.log(`Cleaned ${count} version(s) of react from cache`);
+```
 
 ### Configuration
 
@@ -255,19 +279,24 @@ class CustomPackageManager implements PackageManager {
 zembil.registerManager('custom', new CustomPackageManager());
 ```
 
-### Pause/Resume Control
+### Automatic Interruption Tracking
 
 ```typescript
-// Pause downloads
-await zembil.queue.pause();
+// Start downloading - interruptions are tracked automatically
+await zembil.sync();
 
-// Check if paused
-const isPaused = await zembil.queue.isPaused();
-console.log(`Queue paused: ${isPaused}`);
+// If interrupted (network error, Ctrl+C), progress is automatically saved!
+// Check what was interrupted
+const items = await zembil.queue.list();
+items.forEach(item => {
+  if (item.progress && item.status === 'pending') {
+    console.log(`${item.packageName}: ${item.progress.percentage}% (interrupted)`);
+  }
+});
 
-// Resume downloads
+// Resume interrupted downloads (optional - sync will also retry them)
 await zembil.queue.resume();
-await zembil.sync(); // Continue syncing
+await zembil.sync(); // Continues automatically
 ```
 
 ### Progress Tracking
@@ -477,10 +506,10 @@ if (await zembil.cache.exists('react', '18.2.0')) {
 }
 ```
 
-### 4. Pause/Resume Workflow
+### 4. Automatic Interruption Tracking
 
 ```typescript
-// Start downloading
+// Start downloading - interruptions tracked automatically
 const syncPromise = zembil.sync();
 
 // Monitor progress
@@ -492,17 +521,17 @@ const interval = setInterval(async () => {
   }
 }, 1000);
 
-// Pause if needed (e.g., internet becomes unstable)
-if (internetIsUnstable()) {
-  await zembil.queue.pause();
-  clearInterval(interval);
+// If interrupted (network error, Ctrl+C), progress is automatically saved!
+// Just check status and retry when ready
+try {
+  await syncPromise;
+} catch (error) {
+  // Interruption detected - progress already saved
+  console.log('Download interrupted, progress saved');
 }
 
-// Resume when ready
-if (internetIsStable()) {
-  await zembil.queue.resume();
-  await zembil.sync();
-}
+// Resume when ready (just run sync again)
+await zembil.sync(); // Automatically continues from where it left off
 ```
 
 ### 5. Batch Operations

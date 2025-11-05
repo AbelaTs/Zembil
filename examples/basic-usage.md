@@ -85,29 +85,40 @@ zembil queue add lodash@4.17.21 -p 1
 zembil queue status
 ```
 
-### Pause/Resume Downloads
+### Automatic Interruption Tracking
 
 ```bash
 # Start downloading
 zembil sync
 
-# Pause downloads (useful when internet becomes unstable)
-zembil queue pause
+# If interrupted (network loss, Ctrl+C, power outage):
+# Progress is automatically saved! No action needed.
 
-# Check what's paused and progress
+# Check what was interrupted
 zembil queue list
 # Shows:
-# ⏸️ react@18.2.0 (npm) - Paused at 45%
-#    Progress: [████████░░░░░░░░░░░░] 45% (2.3MB / 5.1MB)
+# ⏸️ react@18.2.0 (npm) - Interrupted at 45%
+#    Progress: [████████░░░░░░░░░░░░] 45% (2.3MB / 5.1MB) (interrupted, will resume)
 # ⏳ express@4.18.0 (npm) - Pending
 
-# Resume when ready
+# Resume when ready (just run sync again!)
+zembil sync
+# Or explicitly mark for retry:
 zembil queue resume
 zembil sync
 
-# Check if queue is paused
+# Check status
 zembil queue status
-# Shows paused count if any
+# Shows interrupted count if any
+
+# Cancel a specific package from queue
+zembil queue cancel react
+
+# Cancel a specific version
+zembil queue cancel react --version 18.2.0
+
+# Cancel all pending downloads
+zembil queue cancel-all
 ```
 
 ### Cache Management
@@ -118,6 +129,12 @@ zembil cache list
 
 # Remove specific package from cache
 zembil cache remove react 18.2.0
+
+# Clean all versions of a package from cache
+zembil cache clean react
+
+# Clean all packages from cache
+zembil cache clean --all
 
 # Clean up orphaned files
 zembil cache cleanup
@@ -155,37 +172,37 @@ zembil bundle extract team-packages.zip ./offline-cache
 - Cache status indicators
 - One-click offline installation
 
-## Pause/Resume & Progress Tracking
+## Automatic Interruption Tracking & Progress
 
-### Manual Control
+### How It Works
 
-Zembil provides manual pause/resume control:
+Zembil automatically tracks interruptions - no manual pause needed:
 
 ```bash
 # Start sync with progress tracking
 zembil sync
 # Real-time progress: ⬇️  react@18.2.0: [████████░░░░░░░░░░░░] 45%
 
-# Pause anytime (in another terminal or Ctrl+C)
-zembil queue pause
+# If interrupted (network loss, Ctrl+C, power outage):
+# Progress is automatically saved! Nothing to do.
 
-# Progress is saved - check it later
+# Check progress anytime
 zembil queue list
-# ⏸️ react@18.2.0 (npm)
-#    Progress: [████████░░░░░░░░░░░░] 45% (2.3MB / 5.1MB)
+# ⏸️ react@18.2.0 (npm) - Interrupted
+#    Progress: [████████░░░░░░░░░░░░] 45% (2.3MB / 5.1MB) (interrupted, will resume)
 
-# Resume when ready
-zembil queue resume
-zembil sync  # Continues from where it left off
+# Resume when ready - just run sync again!
+zembil sync  # Automatically continues from where it left off
 ```
 
 ### Progress Persistence
 
-Progress is saved to `queue.json`:
-- Survives restarts
-- Can check progress anytime
-- Shows MB downloaded/total
-- Visual progress bars
+Progress is automatically saved to `queue.json`:
+- **Survives restarts** - Check progress after reboot
+- **Automatic tracking** - No manual pause needed
+- **Network errors handled** - Interruptions detected automatically
+- **Shows MB downloaded/total** - See exactly where it stopped
+- **Visual progress bars** - Easy to see status
 
 ## Power Outage Resilience
 

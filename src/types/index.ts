@@ -76,6 +76,8 @@ export interface CacheInterface {
   exists(packageName: string, version: string): Promise<boolean>;
   getSize(): Promise<number>;
   cleanup(): Promise<void>;
+  cleanAll(): Promise<number>;
+  cleanPackage(packageName: string): Promise<number>;
 }
 
 export interface QueueInterface {
@@ -88,4 +90,6 @@ export interface QueueInterface {
   pause(): Promise<void>;
   resume(): Promise<void>;
   isPaused(): Promise<boolean>;
+  cancel(packageName: string, version?: string): Promise<number>;
+  cancelAll(): Promise<number>;
 }

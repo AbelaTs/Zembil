@@ -160,6 +160,38 @@ export class Cache implements CacheInterface {
   }
 
   /**
+   * Cleans all packages from cache.
+   * @returns Number of packages removed
+   */
+  async cleanAll(): Promise<number> {
+    const packages = await this.list();
+    const count = packages.length;
+
+    for (const pkg of packages) {
+      await this.remove(pkg.name, pkg.version);
+    }
+
+    return count;
+  }
+
+  /**
+   * Cleans all versions of a specific package from cache.
+   * @param packageName - Name of the package to clean
+   * @returns Number of versions removed
+   */
+  async cleanPackage(packageName: string): Promise<number> {
+    const packages = await this.list();
+    const matching = packages.filter(pkg => pkg.name === packageName);
+    const count = matching.length;
+
+    for (const pkg of matching) {
+      await this.remove(pkg.name, pkg.version);
+    }
+
+    return count;
+  }
+
+  /**
    * Cleans up orphaned files in a specific directory.
    * @param dirPath - Directory path to clean
    * @param packages - List of valid packages

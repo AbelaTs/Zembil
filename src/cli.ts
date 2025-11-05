@@ -12,7 +12,7 @@ const program = new Command();
 program
   .name('zembil')
   .description('Offline Package & Docs Cache for developers with unreliable internet')
-  .version('1.0.3');
+  .version('1.0.4');
 
 // Initialize command
 program
@@ -80,7 +80,7 @@ queueCommand
       items.forEach(item => {
         const status = item.status === 'pending' ? chalk.yellow('⏳') :
                      item.status === 'downloading' ? chalk.blue('⬇️') :
-                     item.status === 'paused' ? chalk.yellow('⏸️') :
+                     item.status === 'paused' ? chalk.yellow('⏸️') : // Interrupted
                      item.status === 'completed' ? chalk.green('✅') :
                      chalk.red('❌');
         
@@ -89,13 +89,14 @@ queueCommand
         console.log(`   Priority: ${item.priority}`);
         console.log(`   Queued: ${item.queuedAt.toLocaleString()}`);
         
-        // Show progress if available
+        // Show progress if available (saved automatically on interruption)
         if (item.progress && item.progress.total > 0) {
           const downloadedMB = (item.progress.downloaded / 1024 / 1024).toFixed(2);
           const totalMB = (item.progress.total / 1024 / 1024).toFixed(2);
           const progressBar = '█'.repeat(Math.floor(item.progress.percentage / 5)) + 
                             '░'.repeat(20 - Math.floor(item.progress.percentage / 5));
-          console.log(`   Progress: [${progressBar}] ${item.progress.percentage}% (${downloadedMB}MB / ${totalMB}MB)`);
+          const progressText = item.status === 'paused' ? ' (interrupted, will resume)' : '';
+          console.log(`   Progress: [${progressBar}] ${item.progress.percentage}% (${downloadedMB}MB / ${totalMB}MB)${progressText}`);
         }
         
         if (item.error) {
@@ -154,17 +155,15 @@ queueCommand
       const zembil = new Zembil();
       await zembil.initialize();
       const status = await zembil.queue.getStatus();
-      const isPaused = await zembil.queue.isPaused();
       
       console.log(chalk.blue('\n📊 Queue Status:'));
       console.log('─'.repeat(40));
-      console.log(`⏳ Pending: ${status.pending}`);
+      console.log(`⏳ Pending: ${status.pending} (includes interrupted downloads)`);
       console.log(`⬇️  Downloading: ${status.downloading}`);
-      console.log(`⏸️  Paused: ${status.paused}`);
       console.log(`✅ Completed: ${status.completed}`);
       console.log(`❌ Failed: ${status.failed}`);
-      if (isPaused) {
-        console.log(chalk.yellow('\n⚠️  Queue is currently paused. Use "zembil queue resume" to continue.'));
+      if (status.paused > 0) {
+        console.log(chalk.yellow(`\n⏸️  Interrupted: ${status.paused} (use "zembil queue resume" to retry)`));
       }
     } catch (error) {
       console.error(chalk.red(`Failed to get status: ${error}`));
@@ -173,33 +172,60 @@ queueCommand
   });
 
 queueCommand
-  .command('pause')
-  .description('Pause queue processing (current download will be paused)')
+  .command('resume')
+  .description('Retry interrupted downloads (interruptions are automatically tracked)')
   .action(async () => {
-    const spinner = ora('Pausing queue...').start();
+    const spinner = ora('Retrying interrupted downloads...').start();
     try {
       const zembil = new Zembil();
       await zembil.initialize();
-      await zembil.queue.pause();
-      spinner.succeed('Queue paused. Use "zembil queue resume" to continue.');
+      await zembil.queue.resume();
+      spinner.succeed('Interrupted downloads ready to retry. Run "zembil sync" to continue.');
     } catch (error) {
-      spinner.fail(`Failed to pause: ${error}`);
+      spinner.fail(`Failed to resume: ${error}`);
       process.exit(1);
     }
   });
 
 queueCommand
-  .command('resume')
-  .description('Resume paused queue processing')
-  .action(async () => {
-    const spinner = ora('Resuming queue...').start();
+  .command('cancel <package>')
+  .description('Cancel a package from queue (by package name)')
+  .option('-v, --version <version>', 'Cancel specific version (cancels all versions if not specified)')
+  .action(async (packageName, options) => {
+    const spinner = ora(`Cancelling ${packageName}...`).start();
     try {
       const zembil = new Zembil();
       await zembil.initialize();
-      await zembil.queue.resume();
-      spinner.succeed('Queue resumed. Run "zembil sync" to continue downloads.');
+      const count = await zembil.queue.cancel(packageName, options.version);
+      
+      if (count > 0) {
+        spinner.succeed(`Cancelled ${count} package(s) from queue`);
+      } else {
+        spinner.fail('Package not found in queue');
+      }
     } catch (error) {
-      spinner.fail(`Failed to resume: ${error}`);
+      spinner.fail(`Failed to cancel: ${error}`);
+      process.exit(1);
+    }
+  });
+
+queueCommand
+  .command('cancel-all')
+  .description('Cancel all pending/interrupted downloads')
+  .action(async () => {
+    const spinner = ora('Cancelling all pending downloads...').start();
+    try {
+      const zembil = new Zembil();
+      await zembil.initialize();
+      const count = await zembil.queue.cancelAll();
+      
+      if (count > 0) {
+        spinner.succeed(`Cancelled ${count} package(s) from queue`);
+      } else {
+        spinner.succeed('No pending downloads to cancel');
+      }
+    } catch (error) {
+      spinner.fail(`Failed to cancel: ${error}`);
       process.exit(1);
     }
   });
@@ -214,12 +240,7 @@ program
       const zembil = new Zembil();
       await zembil.initialize();
       
-      // Check if paused
-      const isPaused = await zembil.queue.isPaused();
-      if (isPaused) {
-        console.log(chalk.yellow('⚠️  Queue is paused. Use "zembil queue resume" first.'));
-        process.exit(0);
-      }
+      // Interruptions are automatically tracked - no need to check pause state
       
       // Show initial status
       const status = await zembil.queue.getStatus();
@@ -364,6 +385,36 @@ cacheCommand
       spinner.succeed('Cache cleaned up');
     } catch (error) {
       spinner.fail(`Cleanup failed: ${error}`);
+      process.exit(1);
+    }
+  });
+
+cacheCommand
+  .command('clean [package]')
+  .description('Clean cache - remove all packages or specific package')
+  .option('-a, --all', 'Clean all packages from cache')
+  .action(async (packageName, options) => {
+    const spinner = ora('Cleaning cache...').start();
+    try {
+      const zembil = new Zembil();
+      await zembil.initialize();
+      
+      if (options.all) {
+        const count = await zembil.cache.cleanAll();
+        spinner.succeed(`Cleaned ${count} package(s) from cache`);
+      } else if (packageName) {
+        const count = await zembil.cache.cleanPackage(packageName);
+        if (count > 0) {
+          spinner.succeed(`Cleaned ${count} version(s) of ${packageName} from cache`);
+        } else {
+          spinner.fail(`Package ${packageName} not found in cache`);
+        }
+      } else {
+        spinner.fail('Please specify a package name or use --all to clean all packages');
+        process.exit(1);
+      }
+    } catch (error) {
+      spinner.fail(`Failed to clean cache: ${error}`);
       process.exit(1);
     }
   });

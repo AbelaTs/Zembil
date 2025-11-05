@@ -54,15 +54,17 @@ Zembil allows developers to:
 2. **Download and cache** packages with full documentation
 3. **Install instantly** from local cache when offline
 4. **Access documentation** with zero latency
-5. **Pause/resume downloads** with progress tracking
+5. **Automatic interruption tracking** - progress saved automatically, resume anytime
 6. **Sync across devices** when connectivity returns
 
 ## Features
 
 - 🚀 **Multi-package manager support**: npm, pip, Maven, and more
 - 📚 **Full documentation caching**: API docs, examples, tutorials
-- ⏸️ **Manual pause/resume**: Control downloads with progress tracking
+- ⏸️ **Pause/Resume downloads**: Manual control with progress tracking
 - 📊 **Real-time progress**: See download progress with visual indicators
+- ❌ **Cancel downloads**: Cancel specific packages or all pending downloads
+- 🧹 **Cache management**: Clean specific packages or entire cache
 - 🔄 **Smart sync**: Only download what's changed
 - 💾 **Efficient storage**: Compressed, deduplicated cache
 - 🎯 **IDE integration**: Works with VS Code, IntelliJ, etc.
@@ -89,17 +91,24 @@ zembil queue add lodash@4.17.21
 zembil sync
 # ⬇️  react@18.2.0: [████████░░░░░░░░░░░░] 45% (2.3MB / 5.1MB)
 
-# Pause if needed (in another terminal or Ctrl+C)
-zembil queue pause
-
-# Check progress
+# If interrupted (network loss, Ctrl+C), progress is automatically saved!
+# Check status anytime:
 zembil queue list
-# ⏸️ react@18.2.0 (npm)
-#    Progress: [████████░░░░░░░░░░░░] 45% (2.3MB / 5.1MB)
+# ⏸️ react@18.2.0 (npm) - interrupted
+#    Progress: [████████░░░░░░░░░░░░] 45% (2.3MB / 5.1MB) (interrupted, will resume)
 
-# Resume when ready
-zembil queue resume
-zembil sync
+# Resume when ready (just run sync again, or use resume command)
+zembil queue resume  # Optional: marks interrupted items for retry
+zembil sync          # Continues from where it left off
+
+# Cancel downloads if needed
+zembil queue cancel react           # Cancel specific package
+zembil queue cancel-all             # Cancel all pending downloads
+
+# Manage cache
+zembil cache clean react            # Remove all versions of a package
+zembil cache clean --all            # Remove all cached packages
+zembil cache cleanup                # Clean orphaned files
 
 # Install from cache (works offline!)
 zembil install react express lodash
@@ -118,21 +127,22 @@ await zembil.initialize();
 await zembil.queue.add('react', '18.2.0', 'npm', 10);
 await zembil.queue.add('express', '4.18.0', 'npm', 8);
 
-// Download packages (with progress tracking)
+// Download packages (progress tracked automatically)
 await zembil.sync();
 
-// Pause/resume control
-await zembil.queue.pause();
-await zembil.queue.resume();
-
-// Check queue status with progress
+// If interrupted (network error, Ctrl+C), progress is automatically saved!
+// Check status to see what was interrupted
 const status = await zembil.queue.getStatus();
 const items = await zembil.queue.list();
 items.forEach(item => {
   if (item.progress) {
-    console.log(`${item.packageName}: ${item.progress.percentage}%`);
+    console.log(`${item.packageName}: ${item.progress.percentage}% (interrupted, will resume)`);
   }
 });
+
+// Resume interrupted downloads (optional - sync will also retry them)
+await zembil.queue.resume();
+await zembil.sync(); // Continues from where it left off
 
 // Install from cache
 await zembil.install('react', './node_modules');
