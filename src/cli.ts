@@ -12,7 +12,7 @@ const program = new Command();
 program
   .name('zembil')
   .description('Offline Package & Docs Cache for developers with unreliable internet')
-  .version('1.0.0');
+  .version('1.0.3');
 
 // Initialize command
 program
