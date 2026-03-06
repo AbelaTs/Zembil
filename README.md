@@ -82,10 +82,13 @@ npm install -g zembil
 # Initialize cache directory
 zembil init
 
+# Initialize with custom cache directory (optional)
+zembil --cache-dir ./my-cache init
+
 # Queue packages for download
-zembil queue add react@18.2.0
-zembil queue add express@4.18.0
-zembil queue add lodash@4.17.21
+zembil queue add react -v 18.2.0
+zembil queue add express -v 4.18.0
+zembil queue add lodash -v 4.17.21
 
 # Download queued packages (when you have good internet)
 zembil sync

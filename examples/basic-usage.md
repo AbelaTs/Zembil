@@ -12,19 +12,19 @@ npm install -g zembil
 zembil init
 
 # Queue packages you'll need for your project
-zembil queue add react@18.2.0
-zembil queue add express@4.18.0
-zembil queue add lodash@4.17.21
-zembil queue add axios@1.6.0
-zembil queue add typescript@5.3.0
+zembil queue add react -v 18.2.0
+zembil queue add express -v 4.18.0
+zembil queue add lodash -v 4.17.21
+zembil queue add axios -v 1.6.0
+zembil queue add typescript -v 5.3.0
 
 # Add Python packages too
-zembil queue add requests@2.31.0 -m pip
-zembil queue add numpy@1.24.0 -m pip
-zembil queue add pandas@2.0.0 -m pip
+zembil queue add requests -v 2.31.0 -m pip
+zembil queue add numpy -v 1.24.0 -m pip
+zembil queue add pandas -v 2.0.0 -m pip
 
 # Add Java packages
-zembil queue add "org.springframework:spring-boot-starter-web@3.1.0" -m maven
+zembil queue add "org.springframework:spring-boot-starter-web" -v 3.1.0 -m maven
 ```
 
 ### Step 2: Download Everything (When internet is stable)
@@ -75,11 +75,11 @@ zembil docs express 4.18.0
 
 ```bash
 # Add high-priority packages
-zembil queue add react@18.2.0 -p 10
-zembil queue add express@4.18.0 -p 10
+zembil queue add react -v 18.2.0 -p 10
+zembil queue add express -v 4.18.0 -p 10
 
 # Add lower-priority packages
-zembil queue add lodash@4.17.21 -p 1
+zembil queue add lodash -v 4.17.21 -p 1
 
 # Check queue status
 zembil queue status
@@ -115,7 +115,7 @@ zembil queue status
 zembil queue cancel react
 
 # Cancel a specific version
-zembil queue cancel react --version 18.2.0
+zembil queue cancel react -v 18.2.0
 
 # Cancel all pending downloads
 zembil queue cancel-all
@@ -224,7 +224,7 @@ zembil cache verify
 zembil cache repair
 
 # Force re-download of specific package
-zembil queue add react@18.2.0 --force
+zembil queue add react -v 18.2.0 --force
 zembil sync
 ```
 
@@ -267,7 +267,7 @@ zembil sync --from-shared
    zembil queue list
    
    # Re-queue and sync
-   zembil queue add package-name@version
+   zembil queue add package-name -v version
    zembil sync
    ```
 
@@ -278,7 +278,7 @@ zembil sync --from-shared
    
    # Re-download package
    zembil cache remove package-name version
-   zembil queue add package-name@version
+   zembil queue add package-name -v version
    zembil sync
    ```
 
@@ -288,7 +288,7 @@ zembil sync --from-shared
    zembil cache list
    
    # Re-sync with documentation
-   zembil queue add package-name@version
+   zembil queue add package-name -v version
    zembil sync
    ```
 
