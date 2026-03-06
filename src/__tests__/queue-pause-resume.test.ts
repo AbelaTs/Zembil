@@ -3,7 +3,6 @@ import { Cache } from '../core/cache';
 import * as fs from 'fs-extra';
 import * as path from 'path';
 import * as os from 'os';
-import { QueueItem } from '../types';
 
 describe('Queue Pause/Resume', () => {
   let queue: Queue;
