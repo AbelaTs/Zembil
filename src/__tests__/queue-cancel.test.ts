@@ -69,7 +69,7 @@ describe('Queue Cancel', () => {
     // Manually set status to completed for one item
     const items = await queue.list();
     items[0].status = 'completed';
-    await (queue as any).saveQueue(items);
+    await (queue as any).db.saveQueueItem(items[0]);
 
     const cancelled = await queue.cancelAll();
     expect(cancelled).toBe(1); // Only pending items cancelled
@@ -87,7 +87,8 @@ describe('Queue Cancel', () => {
     const items = await queue.list();
     items[0].status = 'pending';
     items[1].status = 'paused';
-    await (queue as any).saveQueue(items);
+    await (queue as any).db.saveQueueItem(items[0]);
+    await (queue as any).db.saveQueueItem(items[1]);
 
     const cancelled = await queue.cancelAll();
     expect(cancelled).toBe(2);
@@ -104,7 +105,8 @@ describe('Queue Cancel', () => {
     const items = await queue.list();
     items[0].status = 'completed';
     items[1].status = 'failed';
-    await (queue as any).saveQueue(items);
+    await (queue as any).db.saveQueueItem(items[0]);
+    await (queue as any).db.saveQueueItem(items[1]);
 
     const cancelled = await queue.cancelAll();
     expect(cancelled).toBe(0); // No pending items to cancel

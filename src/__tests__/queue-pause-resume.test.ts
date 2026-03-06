@@ -88,12 +88,10 @@ describe('Queue Pause/Resume', () => {
     test('should reset paused items to pending on resume', async () => {
       await queue.add('test-package', '1.0.0', 'npm');
       
-      // Manually set status to paused in queue.json
-      const queueFile = path.join(tempDir, 'queue.json');
-      const queueData = await fs.readFile(queueFile, 'utf8');
-      const items = JSON.parse(queueData);
+      // Manually set status to paused
+      const items = await queue.list();
       items[0].status = 'paused';
-      await fs.writeFile(queueFile, JSON.stringify(items, null, 2));
+      await (queue as any).db.saveQueueItem(items[0]);
       
       // Resume should reset paused items to pending
       await queue.resume();
@@ -109,9 +107,7 @@ describe('Queue Pause/Resume', () => {
       await queue.add('test-package', '1.0.0', 'npm');
       
       // Simulate progress update
-      const queueFile = path.join(tempDir, 'queue.json');
-      const queueData = await fs.readFile(queueFile, 'utf8');
-      const items: QueueItem[] = JSON.parse(queueData);
+      const items = await queue.list();
       
       items[0].status = 'downloading';
       items[0].progress = {
@@ -120,7 +116,7 @@ describe('Queue Pause/Resume', () => {
         percentage: 50
       };
       
-      await fs.writeFile(queueFile, JSON.stringify(items, null, 2));
+      await (queue as any).db.saveQueueItem(items[0]);
       
       const itemsAfter = await queue.list();
       const testItem = itemsAfter.find(item => item.packageName === 'test-package');
@@ -135,9 +131,7 @@ describe('Queue Pause/Resume', () => {
       await queue.add('test-package', '1.0.0', 'npm');
       
       // Manually add progress
-      const queueFile = path.join(tempDir, 'queue.json');
-      const queueData = await fs.readFile(queueFile, 'utf8');
-      const items: QueueItem[] = JSON.parse(queueData);
+      const items = await queue.list();
       
       items[0].status = 'downloading';
       items[0].progress = {
@@ -146,7 +140,7 @@ describe('Queue Pause/Resume', () => {
         percentage: 20
       };
       
-      await fs.writeFile(queueFile, JSON.stringify(items, null, 2));
+      await (queue as any).db.saveQueueItem(items[0]);
       
       // Reload queue
       const reloadedItems = await queue.list();
@@ -160,9 +154,7 @@ describe('Queue Pause/Resume', () => {
       await queue.add('test-package', '1.0.0', 'npm');
       
       // Set progress
-      const queueFile = path.join(tempDir, 'queue.json');
-      const queueData = await fs.readFile(queueFile, 'utf8');
-      const items: QueueItem[] = JSON.parse(queueData);
+      const items = await queue.list();
       
       items[0].status = 'downloading';
       items[0].progress = {
@@ -171,12 +163,12 @@ describe('Queue Pause/Resume', () => {
         percentage: 100
       };
       
-      await fs.writeFile(queueFile, JSON.stringify(items, null, 2));
+      await (queue as any).db.saveQueueItem(items[0]);
       
       // Simulate completion (progress should be cleared)
       items[0].status = 'completed';
       items[0].progress = undefined;
-      await fs.writeFile(queueFile, JSON.stringify(items, null, 2));
+      await (queue as any).db.saveQueueItem(items[0]);
       
       const itemsAfter = await queue.list();
       const testItem = itemsAfter.find(item => item.packageName === 'test-package');
@@ -192,11 +184,9 @@ describe('Queue Pause/Resume', () => {
       await queue.add('test-package-2', '1.0.0', 'npm');
       
       // Manually set one to paused
-      const queueFile = path.join(tempDir, 'queue.json');
-      const queueData = await fs.readFile(queueFile, 'utf8');
-      const items: QueueItem[] = JSON.parse(queueData);
+      const items = await queue.list();
       items[0].status = 'paused';
-      await fs.writeFile(queueFile, JSON.stringify(items, null, 2));
+      await (queue as any).db.saveQueueItem(items[0]);
       
       const status = await queue.getStatus();
       expect(status.paused).toBe(1);
@@ -207,14 +197,13 @@ describe('Queue Pause/Resume', () => {
       await queue.add('pending-1', '1.0.0', 'npm');
       await queue.add('pending-2', '1.0.0', 'npm');
       
-      const queueFile = path.join(tempDir, 'queue.json');
-      const queueData = await fs.readFile(queueFile, 'utf8');
-      const items: QueueItem[] = JSON.parse(queueData);
+      const items = await queue.list();
       
       // Set different statuses
       items[0].status = 'pending';
       items[1].status = 'paused';
-      await fs.writeFile(queueFile, JSON.stringify(items, null, 2));
+      await (queue as any).db.saveQueueItem(items[0]);
+      await (queue as any).db.saveQueueItem(items[1]);
       
       const status = await queue.getStatus();
       expect(status.pending).toBe(1);
@@ -244,11 +233,9 @@ describe('Queue Pause/Resume', () => {
       await queue.add('test-package', '1.0.0', 'npm');
       
       // Manually set to paused
-      const queueFile = path.join(tempDir, 'queue.json');
-      const queueData = await fs.readFile(queueFile, 'utf8');
-      const items: QueueItem[] = JSON.parse(queueData);
+      const items = await queue.list();
       items[0].status = 'paused';
-      await fs.writeFile(queueFile, JSON.stringify(items, null, 2));
+      await (queue as any).db.saveQueueItem(items[0]);
       
       // Resume should reset to pending
       await queue.resume();
@@ -263,10 +250,8 @@ describe('Queue Pause/Resume', () => {
     test('should load progress from queue.json', async () => {
       await queue.add('test-package', '1.0.0', 'npm');
       
-      // Manually set progress in queue.json
-      const queueFile = path.join(tempDir, 'queue.json');
-      const queueData = await fs.readFile(queueFile, 'utf8');
-      const items: QueueItem[] = JSON.parse(queueData);
+      // Manually set progress
+      const items = await queue.list();
       
       items[0].status = 'downloading';
       items[0].progress = {
@@ -275,7 +260,7 @@ describe('Queue Pause/Resume', () => {
         percentage: 25
       };
       
-      await fs.writeFile(queueFile, JSON.stringify(items, null, 2));
+      await (queue as any).db.saveQueueItem(items[0]);
       
       // Create new queue instance (simulating restart)
       const newQueue = new Queue(tempDir, cache);
@@ -291,4 +276,3 @@ describe('Queue Pause/Resume', () => {
     });
   });
 });
-

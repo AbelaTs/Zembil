@@ -1,6 +1,7 @@
 import * as fs from 'fs-extra';
 import * as path from 'path';
 import fetch from 'node-fetch';
+import { XMLParser } from 'fast-xml-parser';
 import { PackageManagerInterface, PackageInfo } from '../types';
 import { NetworkUtils } from '../utils/network';
 
@@ -11,6 +12,10 @@ import { NetworkUtils } from '../utils/network';
 export class MavenManager implements PackageManagerInterface {
   name = 'maven' as const;
   private mavenCentralUrl = 'https://repo1.maven.org/maven2';
+  private parser = new XMLParser({
+      ignoreAttributes: false,
+      attributeNamePrefix: "@_"
+  });
 
   /**
    * Installs a Maven package to the target directory.
@@ -55,7 +60,16 @@ export class MavenManager implements PackageManagerInterface {
     }
 
     const pomContent = await response.text();
-    const info = this.parsePom(pomContent);
+    
+    // Debug output to see what we're parsing
+    // console.log('POM Content:', pomContent);
+    let info: any = {};
+    try {
+        info = this.parsePom(pomContent);
+    } catch (e) {
+        // Fallback for simple POMs that might fail XML parsing or be empty
+        // console.warn('Failed to parse POM XML:', e);
+    }
     
     return {
       name: packageName,
@@ -160,7 +174,7 @@ export class MavenManager implements PackageManagerInterface {
   private async getJarUrl(packageName: string, version: string): Promise<string> {
     const [, artifactId] = packageName.split(':');
     const mavenPath = this.getMavenPath(packageName);
-    return `${this.mavenCentralUrl}/${mavenPath}/${artifactId}-${version}.jar`;
+    return `${this.mavenCentralUrl}/${mavenPath}/${version}/${artifactId}-${version}.jar`;
   }
 
   /**
@@ -172,7 +186,7 @@ export class MavenManager implements PackageManagerInterface {
    */
   private async getPomUrl(groupId: string, artifactId: string, version: string): Promise<string> {
     const mavenPath = this.getMavenPath(`${groupId}:${artifactId}`);
-    return `${this.mavenCentralUrl}/${mavenPath}/${artifactId}-${version}.pom`;
+    return `${this.mavenCentralUrl}/${mavenPath}/${version}/${artifactId}-${version}.pom`;
   }
 
   /**
@@ -191,26 +205,35 @@ export class MavenManager implements PackageManagerInterface {
    * @returns Parsed package information
    */
   private parsePom(pomContent: string): any {
-    const info: any = {};
+    const parsed = this.parser.parse(pomContent);
+    const project = parsed.project || {};
     
-    const descriptionMatch = pomContent.match(/<description>(.*?)<\/description>/s);
-    if (descriptionMatch) {
-      info.description = descriptionMatch[1].trim();
+    const info: any = {
+        description: project.description,
+        url: project.url,
+    };
+
+    if (project.licenses && project.licenses.license) {
+        const license = Array.isArray(project.licenses.license) 
+            ? project.licenses.license[0] 
+            : project.licenses.license;
+        info.license = { name: license.name };
     }
 
-    const urlMatch = pomContent.match(/<url>(.*?)<\/url>/s);
-    if (urlMatch) {
-      info.url = urlMatch[1].trim();
+    if (project.scm) {
+        info.scm = { url: project.scm.url };
     }
 
-    const licenseMatch = pomContent.match(/<license>.*?<name>(.*?)<\/name>.*?<\/license>/s);
-    if (licenseMatch) {
-      info.license = { name: licenseMatch[1].trim() };
-    }
-
-    const scmMatch = pomContent.match(/<scm>.*?<url>(.*?)<\/url>.*?<\/scm>/s);
-    if (scmMatch) {
-      info.scm = { url: scmMatch[1].trim() };
+    // Parse dependencies
+    if (project.dependencies && project.dependencies.dependency) {
+        const deps = Array.isArray(project.dependencies.dependency)
+            ? project.dependencies.dependency
+            : [project.dependencies.dependency];
+        
+        info.dependencies = {};
+        for (const dep of deps) {
+            info.dependencies[`${dep.groupId}:${dep.artifactId}`] = dep.version;
+        }
     }
 
     return info;
@@ -222,14 +245,19 @@ export class MavenManager implements PackageManagerInterface {
    * @returns Array of version strings
    */
   private parseVersionsFromMetadata(metadata: string): string[] {
-    const versionMatches = metadata.match(/<version>(.*?)<\/version>/g);
-    if (!versionMatches) {
-      return [];
-    }
+      const parsed = this.parser.parse(metadata);
+      const versioning = parsed.metadata?.versioning;
+      
+      if (!versioning || !versioning.versions || !versioning.versions.version) {
+          return [];
+      }
 
-    return versionMatches
-      .map(match => match.replace(/<\/?version>/g, ''))
-      .filter(version => !version.includes('SNAPSHOT'))
-      .sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
+      const versions = Array.isArray(versioning.versions.version)
+          ? versioning.versions.version
+          : [versioning.versions.version];
+          
+      return versions
+          .filter((v: string) => !v.includes('SNAPSHOT'))
+          .sort((a: string, b: string) => a.localeCompare(b, undefined, { numeric: true }));
   }
 }

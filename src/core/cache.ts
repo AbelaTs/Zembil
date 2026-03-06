@@ -16,9 +16,9 @@ export class Cache implements CacheInterface {
    * Creates a new Cache instance.
    * @param cacheDir - Directory path for cache storage
    */
-  constructor(cacheDir: string) {
+  constructor(cacheDir: string, db?: Database) {
     this.cacheDir = cacheDir;
-    this.db = new Database(path.join(cacheDir, 'cache.db'));
+    this.db = db || new Database(path.join(cacheDir, 'cache.db'));
   }
 
   /**

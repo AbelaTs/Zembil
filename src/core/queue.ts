@@ -3,36 +3,35 @@ import * as path from 'path';
 import { QueueInterface, QueueItem, PackageManager, SyncResult } from '../types';
 import { PackageManagerFactory } from '../managers';
 import { Cache } from './cache';
+import { Database } from './database';
 
 /**
  * Queue system for managing package downloads with priority and retry logic.
  * Handles batch processing and error recovery for offline package caching.
  */
 export class Queue implements QueueInterface {
-  private queueFile: string;
   private cache: Cache;
+  private db: Database;
   private isPausedFlag: boolean = false;
-  private currentItem: QueueItem | null = null;
+  private activeItems: QueueItem[] = [];
 
   /**
    * Creates a new Queue instance.
    * @param cacheDir - Cache directory path
    * @param cache - Cache instance for storing packages
+   * @param db - Database instance
    */
-  constructor(cacheDir: string, cache: Cache) {
-    this.queueFile = path.join(cacheDir, 'queue.json');
+  constructor(cacheDir: string, cache: Cache, db?: Database) {
     this.cache = cache;
+    this.db = db || new Database(path.join(cacheDir, 'cache.db'));
   }
 
   /**
    * Initializes the queue system.
    */
   async initialize(): Promise<void> {
-    await fs.ensureFile(this.queueFile);
-    const queueData = await this.loadQueue();
-    if (!queueData) {
-      await this.saveQueue([]);
-    }
+    // Database initialization handles table creation
+    await this.db.initialize();
   }
 
   /**
@@ -55,7 +54,7 @@ export class Queue implements QueueInterface {
       status: 'pending'
     };
 
-    const queue = await this.loadQueue();
+    const queue = await this.db.listQueueItems();
     
     const existing = queue.find(item => 
       item.packageName === packageName && 
@@ -67,8 +66,7 @@ export class Queue implements QueueInterface {
       throw new Error(`Package ${packageName}@${version} is already queued`);
     }
 
-    queue.push(queueItem);
-    await this.saveQueue(queue);
+    await this.db.saveQueueItem(queueItem);
     return id;
   }
 
@@ -78,15 +76,12 @@ export class Queue implements QueueInterface {
    * @returns True if package was removed, false if not found
    */
   async remove(id: string): Promise<boolean> {
-    const queue = await this.loadQueue();
-    const index = queue.findIndex(item => item.id === id);
-    
-    if (index === -1) {
+    const item = await this.db.getQueueItem(id);
+    if (!item) {
       return false;
     }
 
-    queue.splice(index, 1);
-    await this.saveQueue(queue);
+    await this.db.removeQueueItem(id);
     return true;
   }
 
@@ -97,20 +92,19 @@ export class Queue implements QueueInterface {
    * @returns Number of packages cancelled
    */
   async cancel(packageName: string, version?: string): Promise<number> {
-    const queue = await this.loadQueue();
-    const initialLength = queue.length;
+    const queue = await this.db.listQueueItems();
     
-    const filtered = queue.filter(item => {
-      if (item.packageName !== packageName) return true;
-      if (version && item.version !== version) return true;
-      return false; // Cancel this item
+    const toRemove = queue.filter(item => {
+      if (item.packageName !== packageName) return false;
+      if (version && item.version !== version) return false;
+      return true; // Cancel this item
     });
 
-    if (filtered.length < initialLength) {
-      await this.saveQueue(filtered);
+    for (const item of toRemove) {
+        await this.db.removeQueueItem(item.id);
     }
 
-    return initialLength - filtered.length;
+    return toRemove.length;
   }
 
   /**
@@ -118,16 +112,18 @@ export class Queue implements QueueInterface {
    * @returns Number of packages cancelled
    */
   async cancelAll(): Promise<number> {
-    const queue = await this.loadQueue();
-    const initialLength = queue.length;
+    const queue = await this.db.listQueueItems();
     
     // Keep only completed and failed items
-    const filtered = queue.filter(item => 
-      item.status === 'completed' || item.status === 'failed'
+    const toRemove = queue.filter(item => 
+      item.status !== 'completed' && item.status !== 'failed'
     );
 
-    await this.saveQueue(filtered);
-    return initialLength - filtered.length;
+    for (const item of toRemove) {
+        await this.db.removeQueueItem(item.id);
+    }
+
+    return toRemove.length;
   }
 
   /**
@@ -135,18 +131,18 @@ export class Queue implements QueueInterface {
    * @returns Array of queue items
    */
   async list(): Promise<QueueItem[]> {
-    const queue = await this.loadQueue();
-    return queue.sort((a, b) => b.priority - a.priority || a.queuedAt.getTime() - b.queuedAt.getTime());
+    return await this.db.listQueueItems();
   }
 
   /**
    * Processes all pending items in the queue.
    * Downloads packages and stores them in the cache.
    * Supports pause/resume functionality.
+   * @param concurrency - Number of concurrent downloads (default: 3)
    * @returns Sync result with download statistics
    */
-  async process(): Promise<SyncResult> {
-    const queue = await this.loadQueue();
+  async process(concurrency: number = 3): Promise<SyncResult> {
+    const queue = await this.db.listQueueItems();
     const pendingItems = queue.filter(item => item.status === 'pending' || item.status === 'paused');
     
     const result: SyncResult = {
@@ -170,70 +166,71 @@ export class Queue implements QueueInterface {
       this.isPausedFlag = false;
     }
 
-    for (const item of pendingItems) {
-      // Check if paused - reload queue to get latest status
-      if (this.isPausedFlag) {
-        item.status = 'paused';
-        await this.updateItem(item);
-        break;
-      }
-      
-      // Double-check item status in saved queue
-      const currentQueue = await this.loadQueue();
-      const currentItem = currentQueue.find(q => q.id === item.id);
-      if (currentItem && currentItem.status === 'paused') {
-        break;
-      }
-      
-      this.currentItem = item;
-      try {
-        await this.processItem(item);
-        result.downloaded++;
-        
-        item.status = 'completed';
-        item.progress = undefined; // Clear progress on completion
-        await this.saveQueue(queue);
-        
-      } catch (error) {
-        // Check if paused during processing
-        if (this.isPausedFlag || (error instanceof Error && error.message === 'Paused')) {
-          item.status = 'paused';
-          await this.updateItem(item);
-          break;
+    const processSingleItem = async (item: QueueItem) => {
+        // Double-check item status in saved queue
+        const currentItem = await this.db.getQueueItem(item.id);
+        if (currentItem && currentItem.status === 'paused') {
+            return;
         }
+
+        this.activeItems.push(item);
         
-        // If interrupted (network error, user cancellation, etc.), automatically track it
-        // Progress is already saved, so we keep it for resume
-        const isNetworkError = error instanceof Error && (
-          error.message.includes('network') || 
-          error.message.includes('fetch') ||
-          error.message.includes('ECONNREFUSED') ||
-          error.message.includes('ETIMEDOUT') ||
-          error.message.includes('aborted') ||
-          error.message.includes('ECONNRESET')
-        );
-        
-        // If it's a network error or interruption, keep progress and mark as pending for retry
-        if (isNetworkError || item.progress) {
-          // Progress is preserved - will retry on next sync automatically
-          item.status = 'pending';
-          item.error = error instanceof Error ? error.message : String(error);
-          await this.updateItem(item);
-          continue;
+        try {
+            await this.processItem(item);
+            result.downloaded++;
+            
+            item.status = 'completed';
+            item.progress = undefined; // Clear progress on completion
+            await this.db.saveQueueItem(item);
+            
+        } catch (error) {
+            // Check if paused during processing
+            if (this.isPausedFlag || (error instanceof Error && error.message === 'Paused')) {
+                item.status = 'paused';
+                await this.updateItem(item);
+                return;
+            }
+            
+            // If interrupted (network error, user cancellation, etc.), automatically track it
+            // Progress is already saved, so we keep it for resume
+            const isNetworkError = error instanceof Error && (
+                error.message.includes('network') || 
+                error.message.includes('fetch') ||
+                error.message.includes('ECONNREFUSED') ||
+                error.message.includes('ETIMEDOUT') ||
+                error.message.includes('aborted') ||
+                error.message.includes('ECONNRESET')
+            );
+            
+            // If it's a network error or interruption, keep progress and mark as pending for retry
+            if (isNetworkError || item.progress) {
+                // Progress is preserved - will retry on next sync automatically
+                item.status = 'pending';
+                item.error = error instanceof Error ? error.message : String(error);
+                await this.updateItem(item);
+                return;
+            }
+            
+            // Real failures (not interruptions) - mark as failed
+            console.error(`Failed to process ${item.packageName}@${item.version}:`, error);
+            item.status = 'failed';
+            item.error = error instanceof Error ? error.message : String(error);
+            item.progress = undefined;
+            result.failed++;
+            result.errors.push(`${item.packageName}@${item.version}: ${item.error}`);
+            await this.db.saveQueueItem(item);
+        } finally {
+            this.activeItems = this.activeItems.filter(i => i.id !== item.id);
         }
-        
-        // Real failures (not interruptions) - mark as failed
-        console.error(`Failed to process ${item.packageName}@${item.version}:`, error);
-        item.status = 'failed';
-        item.error = error instanceof Error ? error.message : String(error);
-        item.progress = undefined;
-        result.failed++;
-        result.errors.push(`${item.packageName}@${item.version}: ${item.error}`);
-        await this.saveQueue(queue);
-      }
+    };
+
+    // Process in batches
+    for (let i = 0; i < pendingItems.length; i += concurrency) {
+        if (this.isPausedFlag) break;
+        const batch = pendingItems.slice(i, i + concurrency);
+        await Promise.all(batch.map(item => processSingleItem(item)));
     }
 
-    this.currentItem = null;
     result.success = result.failed === 0;
     return result;
   }
@@ -242,7 +239,7 @@ export class Queue implements QueueInterface {
    * Clears all items from the queue.
    */
   async clear(): Promise<void> {
-    await this.saveQueue([]);
+    await this.db.clearQueue();
   }
 
   /**
@@ -250,7 +247,7 @@ export class Queue implements QueueInterface {
    * @returns Queue status with counts for each state
    */
   async getStatus(): Promise<{ pending: number; downloading: number; completed: number; failed: number; paused: number }> {
-    const queue = await this.loadQueue();
+    const queue = await this.db.listQueueItems();
     return {
       pending: queue.filter(item => item.status === 'pending').length,
       downloading: queue.filter(item => item.status === 'downloading').length,
@@ -266,20 +263,15 @@ export class Queue implements QueueInterface {
    */
   async resume(): Promise<void> {
     this.isPausedFlag = false;
-    const queue = await this.loadQueue();
-    let updated = false;
+    const queue = await this.db.listQueueItems();
     
     for (const item of queue) {
       // Retry interrupted items (they have progress saved)
       if (item.status === 'paused' || (item.status === 'failed' && item.progress)) {
         item.status = 'pending';
         // Keep progress for resume
-        updated = true;
+        await this.db.saveQueueItem(item);
       }
-    }
-    
-    if (updated) {
-      await this.saveQueue(queue);
     }
   }
   
@@ -290,25 +282,21 @@ export class Queue implements QueueInterface {
   async pause(): Promise<void> {
     this.isPausedFlag = true;
     
-    // Mark current downloading item as paused
-    if (this.currentItem) {
-      if (this.currentItem.status === 'downloading' || this.currentItem.status === 'pending') {
-        this.currentItem.status = 'paused';
-        await this.updateItem(this.currentItem);
-      }
+    // Mark current downloading items as paused
+    for (const item of this.activeItems) {
+        if (item.status === 'downloading' || item.status === 'pending') {
+            item.status = 'paused';
+            await this.updateItem(item);
+        }
     }
     
     // Also mark pending and downloading items as paused in queue
-    const queue = await this.loadQueue();
-    let updated = false;
+    const queue = await this.db.listQueueItems();
     for (const item of queue) {
       if (item.status === 'pending' || item.status === 'downloading') {
         item.status = 'paused';
-        updated = true;
+        await this.db.saveQueueItem(item);
       }
-    }
-    if (updated) {
-      await this.saveQueue(queue);
     }
   }
 
@@ -409,46 +397,11 @@ export class Queue implements QueueInterface {
   }
 
   /**
-   * Updates a queue item in the queue file.
+   * Updates a queue item in the database.
    * @param item - Queue item to update
    */
   private async updateItem(item: QueueItem): Promise<void> {
-    const queue = await this.loadQueue();
-    const index = queue.findIndex(q => q.id === item.id);
-    if (index !== -1) {
-      queue[index] = item;
-      await this.saveQueue(queue);
-    }
-  }
-
-  /**
-   * Loads the queue from the queue file.
-   * @returns Array of queue items
-   */
-  private async loadQueue(): Promise<QueueItem[]> {
-    try {
-      const data = await fs.readFile(this.queueFile, 'utf8');
-      const queue = JSON.parse(data);
-      return queue.map((item: any) => ({
-        ...item,
-        queuedAt: new Date(item.queuedAt),
-        progress: item.progress ? {
-          downloaded: item.progress.downloaded || 0,
-          total: item.progress.total || 0,
-          percentage: item.progress.percentage || 0
-        } : undefined
-      }));
-    } catch (error) {
-      return [];
-    }
-  }
-
-  /**
-   * Saves the queue to the queue file.
-   * @param queue - Queue items to save
-   */
-  private async saveQueue(queue: QueueItem[]): Promise<void> {
-    await fs.writeFile(this.queueFile, JSON.stringify(queue, null, 2));
+    await this.db.saveQueueItem(item);
   }
 
   /**

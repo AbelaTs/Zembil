@@ -12,19 +12,21 @@ const program = new Command();
 program
   .name('zembil')
   .description('Offline Package & Docs Cache for developers with unreliable internet')
-  .version('1.0.4');
+  .version('1.0.4')
+  .option('-c, --cache-dir <path>', 'Cache directory path', path.join(os.homedir(), '.zembil'));
 
 // Initialize command
 program
   .command('init')
   .description('Initialize Zembil cache directory')
-  .option('-d, --dir <path>', 'Cache directory path', path.join(os.homedir(), '.zembil'))
-  .action(async (options) => {
+  .action(async () => {
+    const opts = program.opts();
+    const cacheDir = opts.cacheDir;
     const spinner = ora('Initializing Zembil cache...').start();
     try {
-      const zembil = new Zembil(options.dir);
+      const zembil = new Zembil(cacheDir);
       await zembil.initialize();
-      spinner.succeed(`Zembil cache initialized at ${options.dir}`);
+      spinner.succeed(`Zembil cache initialized at ${cacheDir}`);
     } catch (error) {
       spinner.fail(`Failed to initialize: ${error}`);
       process.exit(1);
@@ -39,21 +41,22 @@ const queueCommand = program
 queueCommand
   .command('add <package>')
   .description('Add package to download queue')
-  .option('-v, --version <version>', 'Package version', 'latest')
+  .option('-v, --pkg-version <version>', 'Package version', 'latest')
   .option('-m, --manager <manager>', 'Package manager (npm, pip, maven)', 'npm')
   .option('-p, --priority <priority>', 'Download priority (higher = more important)', '0')
   .action(async (packageName, options) => {
+    const opts = program.opts();
     const spinner = ora(`Adding ${packageName} to queue...`).start();
     try {
-      const zembil = new Zembil();
+      const zembil = new Zembil(opts.cacheDir);
       await zembil.initialize();
       const id = await zembil.queue.add(
         packageName, 
-        options.version, 
+        options.pkgVersion, 
         options.manager, 
         parseInt(options.priority)
       );
-      spinner.succeed(`Added ${packageName}@${options.version} to queue (ID: ${id})`);
+      spinner.succeed(`Added ${packageName}@${options.pkgVersion} to queue (ID: ${id})`);
     } catch (error) {
       spinner.fail(`Failed to add package: ${error}`);
       process.exit(1);
@@ -65,7 +68,8 @@ queueCommand
   .description('List queued packages')
   .action(async () => {
     try {
-      const zembil = new Zembil();
+      const opts = program.opts();
+      const zembil = new Zembil(opts.cacheDir);
       await zembil.initialize();
       const items = await zembil.queue.list();
       
@@ -114,9 +118,10 @@ queueCommand
   .command('remove <id>')
   .description('Remove package from queue')
   .action(async (id) => {
+    const opts = program.opts();
     const spinner = ora('Removing package from queue...').start();
     try {
-      const zembil = new Zembil();
+      const zembil = new Zembil(opts.cacheDir);
       await zembil.initialize();
       const removed = await zembil.queue.remove(id);
       
@@ -135,9 +140,10 @@ queueCommand
   .command('clear')
   .description('Clear all packages from queue')
   .action(async () => {
+    const opts = program.opts();
     const spinner = ora('Clearing queue...').start();
     try {
-      const zembil = new Zembil();
+      const zembil = new Zembil(opts.cacheDir);
       await zembil.initialize();
       await zembil.queue.clear();
       spinner.succeed('Queue cleared');
@@ -152,7 +158,8 @@ queueCommand
   .description('Show queue status')
   .action(async () => {
     try {
-      const zembil = new Zembil();
+      const opts = program.opts();
+      const zembil = new Zembil(opts.cacheDir);
       await zembil.initialize();
       const status = await zembil.queue.getStatus();
       
@@ -175,9 +182,10 @@ queueCommand
   .command('resume')
   .description('Retry interrupted downloads (interruptions are automatically tracked)')
   .action(async () => {
+    const opts = program.opts();
     const spinner = ora('Retrying interrupted downloads...').start();
     try {
-      const zembil = new Zembil();
+      const zembil = new Zembil(opts.cacheDir);
       await zembil.initialize();
       await zembil.queue.resume();
       spinner.succeed('Interrupted downloads ready to retry. Run "zembil sync" to continue.');
@@ -190,13 +198,14 @@ queueCommand
 queueCommand
   .command('cancel <package>')
   .description('Cancel a package from queue (by package name)')
-  .option('-v, --version <version>', 'Cancel specific version (cancels all versions if not specified)')
+  .option('-v, --pkg-version <version>', 'Cancel specific version (cancels all versions if not specified)')
   .action(async (packageName, options) => {
+    const opts = program.opts();
     const spinner = ora(`Cancelling ${packageName}...`).start();
     try {
-      const zembil = new Zembil();
+      const zembil = new Zembil(opts.cacheDir);
       await zembil.initialize();
-      const count = await zembil.queue.cancel(packageName, options.version);
+      const count = await zembil.queue.cancel(packageName, options.pkgVersion);
       
       if (count > 0) {
         spinner.succeed(`Cancelled ${count} package(s) from queue`);
@@ -213,9 +222,10 @@ queueCommand
   .command('cancel-all')
   .description('Cancel all pending/interrupted downloads')
   .action(async () => {
+    const opts = program.opts();
     const spinner = ora('Cancelling all pending downloads...').start();
     try {
-      const zembil = new Zembil();
+      const zembil = new Zembil(opts.cacheDir);
       await zembil.initialize();
       const count = await zembil.queue.cancelAll();
       
@@ -237,7 +247,8 @@ program
   .option('-f, --force', 'Force download even if package exists in cache')
   .action(async (options) => {
     try {
-      const zembil = new Zembil();
+      const opts = program.opts();
+      const zembil = new Zembil(opts.cacheDir);
       await zembil.initialize();
       
       // Interruptions are automatically tracked - no need to check pause state
@@ -258,18 +269,22 @@ program
       
       // Monitor progress
       const progressInterval = setInterval(async () => {
-        const items = await zembil.queue.list();
-        const downloading = items.find(item => item.status === 'downloading');
-        
-        if (downloading && downloading.progress) {
-          const progress = downloading.progress;
-          const progressBar = '█'.repeat(Math.floor(progress.percentage / 5)) + 
-                            '░'.repeat(20 - Math.floor(progress.percentage / 5));
-          const downloadedMB = (progress.downloaded / 1024 / 1024).toFixed(2);
-          const totalMB = (progress.total / 1024 / 1024).toFixed(2);
+        try {
+          const items = await zembil.queue.list();
+          const downloading = items.find(item => item.status === 'downloading');
           
-          process.stdout.write(`\r⬇️  ${downloading.packageName}@${downloading.version}: ` +
-            `[${progressBar}] ${progress.percentage}% (${downloadedMB}MB / ${totalMB}MB)`);
+          if (downloading && downloading.progress) {
+            const progress = downloading.progress;
+            const progressBar = '█'.repeat(Math.floor(progress.percentage / 5)) + 
+                              '░'.repeat(20 - Math.floor(progress.percentage / 5));
+            const downloadedMB = (progress.downloaded / 1024 / 1024).toFixed(2);
+            const totalMB = (progress.total / 1024 / 1024).toFixed(2);
+            
+            process.stdout.write(`\r⬇️  ${downloading.packageName}@${downloading.version}: ` +
+              `[${progressBar}] ${progress.percentage}% (${downloadedMB}MB / ${totalMB}MB)`);
+          }
+        } catch (e) {
+          // Ignore errors during progress update
         }
       }, 500);
       
@@ -299,9 +314,10 @@ program
   .description('Install packages from cache (works offline)')
   .option('-d, --dir <path>', 'Installation directory', process.cwd())
   .action(async (packages, options) => {
+    const opts = program.opts();
     const spinner = ora('Installing packages from cache...').start();
     try {
-      const zembil = new Zembil();
+      const zembil = new Zembil(opts.cacheDir);
       await zembil.initialize();
       
       for (const packageName of packages) {
@@ -325,7 +341,8 @@ cacheCommand
   .description('List cached packages')
   .action(async () => {
     try {
-      const zembil = new Zembil();
+      const opts = program.opts();
+      const zembil = new Zembil(opts.cacheDir);
       await zembil.initialize();
       const packages = await zembil.cache.list();
       
@@ -356,9 +373,10 @@ cacheCommand
   .command('remove <package> <version>')
   .description('Remove package from cache')
   .action(async (packageName, version) => {
+    const opts = program.opts();
     const spinner = ora(`Removing ${packageName}@${version} from cache...`).start();
     try {
-      const zembil = new Zembil();
+      const zembil = new Zembil(opts.cacheDir);
       await zembil.initialize();
       const removed = await zembil.cache.remove(packageName, version);
       
@@ -377,9 +395,10 @@ cacheCommand
   .command('cleanup')
   .description('Clean up orphaned files and optimize cache')
   .action(async () => {
+    const opts = program.opts();
     const spinner = ora('Cleaning up cache...').start();
     try {
-      const zembil = new Zembil();
+      const zembil = new Zembil(opts.cacheDir);
       await zembil.initialize();
       await zembil.cache.cleanup();
       spinner.succeed('Cache cleaned up');
@@ -394,9 +413,10 @@ cacheCommand
   .description('Clean cache - remove all packages or specific package')
   .option('-a, --all', 'Clean all packages from cache')
   .action(async (packageName, options) => {
+    const opts = program.opts();
     const spinner = ora('Cleaning cache...').start();
     try {
-      const zembil = new Zembil();
+      const zembil = new Zembil(opts.cacheDir);
       await zembil.initialize();
       
       if (options.all) {
@@ -425,7 +445,8 @@ program
   .description('Open package documentation')
   .action(async (packageName, version) => {
     try {
-      const zembil = new Zembil();
+      const opts = program.opts();
+      const zembil = new Zembil(opts.cacheDir);
       await zembil.initialize();
       const docs = await zembil.getDocumentation(packageName, version);
       
@@ -448,7 +469,8 @@ program
   .description('Show Zembil information and statistics')
   .action(async () => {
     try {
-      const zembil = new Zembil();
+      const opts = program.opts();
+      const zembil = new Zembil(opts.cacheDir);
       await zembil.initialize();
       const stats = await zembil.getStats();
       

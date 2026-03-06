@@ -23,9 +23,9 @@ export class Zembil {
    */
   constructor(cacheDir?: string) {
     this.cacheDir = cacheDir || path.join(require('os').homedir(), '.zembil');
-    this._cache = new Cache(this.cacheDir);
-    this._queue = new Queue(this.cacheDir, this._cache);
     this.db = new Database(path.join(this.cacheDir, 'cache.db'));
+    this._cache = new Cache(this.cacheDir, this.db);
+    this._queue = new Queue(this.cacheDir, this._cache, this.db);
     this.config = this.getDefaultConfig();
   }
 
@@ -171,7 +171,7 @@ export class Zembil {
       return null;
     }
 
-    return matching.sort((a, b) => b.version.localeCompare(a.version))[0];
+    return matching.sort((a, b) => b.version.localeCompare(a.version, undefined, { numeric: true }))[0];
   }
 
   /**

@@ -3,16 +3,16 @@ import * as path from 'path';
 import { CachedPackage } from '../types';
 
 export class OfflineUtils {
-  static async createOfflinePackage(packageName: string, version: string, manager: string): Promise<string> {
+  static async createOfflinePackage(pkg: CachedPackage): Promise<string> {
     // Create a portable package that can be shared offline
-    const tempDir = path.join(process.cwd(), 'temp', `offline-${packageName}-${version}`);
+    const tempDir = path.join(process.cwd(), 'temp', `offline-${pkg.name}-${pkg.version}`);
     await fs.ensureDir(tempDir);
 
     // Create package manifest
     const manifest = {
-      name: packageName,
-      version: version,
-      manager: manager,
+      name: pkg.name,
+      version: pkg.version,
+      manager: pkg.manager,
       created: new Date().toISOString(),
       zembil: {
         version: '1.0.0',
@@ -24,6 +24,20 @@ export class OfflineUtils {
       path.join(tempDir, 'manifest.json'),
       JSON.stringify(manifest, null, 2)
     );
+
+    // Copy package file
+    const ext = path.extname(pkg.localPath);
+    await fs.copy(pkg.localPath, path.join(tempDir, `package${ext}`));
+
+    // Copy docs
+    if (pkg.documentationPath && await fs.pathExists(pkg.documentationPath)) {
+        await fs.copy(pkg.documentationPath, path.join(tempDir, 'docs'));
+    }
+
+    // Copy examples
+    if (pkg.examplesPath && await fs.pathExists(pkg.examplesPath)) {
+        await fs.copy(pkg.examplesPath, path.join(tempDir, 'examples'));
+    }
 
     return tempDir;
   }

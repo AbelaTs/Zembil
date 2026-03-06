@@ -73,9 +73,7 @@ describe('Progress Tracking', () => {
     test('should save progress to queue.json', async () => {
       await queue.add('test-package', '1.0.0', 'npm');
       
-      const queueFile = path.join(tempDir, 'queue.json');
-      const queueData = await fs.readFile(queueFile, 'utf8');
-      const items: QueueItem[] = JSON.parse(queueData);
+      const items = await queue.list();
       
       // Update with progress
       items[0].status = 'downloading';
@@ -85,11 +83,10 @@ describe('Progress Tracking', () => {
         percentage: 20
       };
       
-      await fs.writeFile(queueFile, JSON.stringify(items, null, 2));
+      await (queue as any).db.saveQueueItem(items[0]);
       
       // Verify it was saved
-      const savedData = await fs.readFile(queueFile, 'utf8');
-      const savedItems: QueueItem[] = JSON.parse(savedData);
+      const savedItems = await queue.list();
       
       expect(savedItems[0].progress).toBeDefined();
       expect(savedItems[0].progress?.downloaded).toBe(1048576);
@@ -98,12 +95,8 @@ describe('Progress Tracking', () => {
     });
 
     test('should load progress from queue.json', async () => {
-      await queue.add('test-package', '1.0.0', 'npm');
-      
       // Write progress directly
-      const queueFile = path.join(tempDir, 'queue.json');
-      const items: QueueItem[] = [
-        {
+      const item: QueueItem = {
           id: 'test-id',
           packageName: 'test-package',
           version: '1.0.0',
@@ -116,10 +109,9 @@ describe('Progress Tracking', () => {
             total: 10485760, // 10MB
             percentage: 30
           }
-        }
-      ];
+      };
       
-      await fs.writeFile(queueFile, JSON.stringify(items, null, 2));
+      await (queue as any).db.saveQueueItem(item);
       
       // Load and verify
       const loadedItems = await queue.list();
@@ -136,9 +128,7 @@ describe('Progress Tracking', () => {
     test('should update progress incrementally', async () => {
       await queue.add('test-package', '1.0.0', 'npm');
       
-      const queueFile = path.join(tempDir, 'queue.json');
-      const queueData = await fs.readFile(queueFile, 'utf8');
-      const items: QueueItem[] = JSON.parse(queueData);
+      const items = await queue.list();
       
       // Simulate progress updates
       const updates = [
@@ -150,7 +140,7 @@ describe('Progress Tracking', () => {
       
       for (const update of updates) {
         items[0].progress = update;
-        await fs.writeFile(queueFile, JSON.stringify(items, null, 2));
+        await (queue as any).db.saveQueueItem(items[0]);
         
         const loadedItems = await queue.list();
         const testItem = loadedItems.find(item => item.packageName === 'test-package');
@@ -162,9 +152,7 @@ describe('Progress Tracking', () => {
     test('should clear progress on completion', async () => {
       await queue.add('test-package', '1.0.0', 'npm');
       
-      const queueFile = path.join(tempDir, 'queue.json');
-      const queueData = await fs.readFile(queueFile, 'utf8');
-      const items: QueueItem[] = JSON.parse(queueData);
+      const items = await queue.list();
       
       // Set progress
       items[0].status = 'downloading';
@@ -173,12 +161,12 @@ describe('Progress Tracking', () => {
         total: 10485760,
         percentage: 100
       };
-      await fs.writeFile(queueFile, JSON.stringify(items, null, 2));
+      await (queue as any).db.saveQueueItem(items[0]);
       
       // Complete
       items[0].status = 'completed';
       items[0].progress = undefined;
-      await fs.writeFile(queueFile, JSON.stringify(items, null, 2));
+      await (queue as any).db.saveQueueItem(items[0]);
       
       const loadedItems = await queue.list();
       const testItem = loadedItems.find(item => item.packageName === 'test-package');
@@ -222,4 +210,3 @@ describe('Progress Tracking', () => {
     });
   });
 });
-

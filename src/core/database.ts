@@ -1,6 +1,5 @@
 import * as sqlite3 from 'sqlite3';
-// import * as path from 'path';
-import { CachedPackage } from '../types';
+import { CachedPackage, QueueItem } from '../types';
 
 /**
  * Database layer for storing package metadata and cache information.
@@ -21,35 +20,42 @@ export class Database {
    * Initializes the database schema.
    */
   async initialize(): Promise<void> {
-    return new Promise((resolve, reject) => {
-      this.db.serialize(() => {
-        this.db.run(`
-          CREATE TABLE IF NOT EXISTS packages (
-            id TEXT PRIMARY KEY,
-            name TEXT NOT NULL,
-            version TEXT NOT NULL,
-            manager TEXT NOT NULL,
-            description TEXT,
-            homepage TEXT,
-            repository TEXT,
-            license TEXT,
-            dependencies TEXT,
-            devDependencies TEXT,
-            peerDependencies TEXT,
-            cachedAt TEXT NOT NULL,
-            size INTEGER NOT NULL,
-            checksum TEXT NOT NULL,
-            localPath TEXT NOT NULL,
-            documentationPath TEXT,
-            examplesPath TEXT,
-            UNIQUE(name, version)
-          )
-        `, (err) => {
-          if (err) reject(err);
-          else resolve();
-        });
-      });
-    });
+    await this.run(`
+      CREATE TABLE IF NOT EXISTS packages (
+        id TEXT PRIMARY KEY,
+        name TEXT NOT NULL,
+        version TEXT NOT NULL,
+        manager TEXT NOT NULL,
+        description TEXT,
+        homepage TEXT,
+        repository TEXT,
+        license TEXT,
+        dependencies TEXT,
+        devDependencies TEXT,
+        peerDependencies TEXT,
+        cachedAt TEXT NOT NULL,
+        size INTEGER NOT NULL,
+        checksum TEXT NOT NULL,
+        localPath TEXT NOT NULL,
+        documentationPath TEXT,
+        examplesPath TEXT,
+        UNIQUE(name, version)
+      )
+    `);
+
+    await this.run(`
+      CREATE TABLE IF NOT EXISTS queue (
+        id TEXT PRIMARY KEY,
+        packageName TEXT NOT NULL,
+        version TEXT NOT NULL,
+        manager TEXT NOT NULL,
+        priority INTEGER NOT NULL,
+        queuedAt TEXT NOT NULL,
+        status TEXT NOT NULL,
+        error TEXT,
+        progress TEXT
+      )
+    `);
   }
 
   /**
@@ -57,40 +63,33 @@ export class Database {
    * @param pkg - Cached package to save
    */
   async savePackage(pkg: CachedPackage): Promise<void> {
-    return new Promise((resolve, reject) => {
-      const stmt = this.db.prepare(`
-        INSERT OR REPLACE INTO packages (
-          id, name, version, manager, description, homepage, repository, license,
-          dependencies, devDependencies, peerDependencies, cachedAt, size,
-          checksum, localPath, documentationPath, examplesPath
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-      `);
+    const stmt = `
+      INSERT OR REPLACE INTO packages (
+        id, name, version, manager, description, homepage, repository, license,
+        dependencies, devDependencies, peerDependencies, cachedAt, size,
+        checksum, localPath, documentationPath, examplesPath
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `;
 
-      stmt.run([
-        pkg.id,
-        pkg.name,
-        pkg.version,
-        pkg.manager,
-        pkg.description || null,
-        pkg.homepage || null,
-        pkg.repository || null,
-        pkg.license || null,
-        pkg.dependencies ? JSON.stringify(pkg.dependencies) : null,
-        pkg.devDependencies ? JSON.stringify(pkg.devDependencies) : null,
-        pkg.peerDependencies ? JSON.stringify(pkg.peerDependencies) : null,
-        pkg.cachedAt.toISOString(),
-        pkg.size,
-        pkg.checksum,
-        pkg.localPath,
-        pkg.documentationPath || null,
-        pkg.examplesPath || null
-      ], (err) => {
-        if (err) reject(err);
-        else resolve();
-      });
-
-      stmt.finalize();
-    });
+    await this.run(stmt, [
+      pkg.id,
+      pkg.name,
+      pkg.version,
+      pkg.manager,
+      pkg.description || null,
+      pkg.homepage || null,
+      pkg.repository || null,
+      pkg.license || null,
+      pkg.dependencies ? JSON.stringify(pkg.dependencies) : null,
+      pkg.devDependencies ? JSON.stringify(pkg.devDependencies) : null,
+      pkg.peerDependencies ? JSON.stringify(pkg.peerDependencies) : null,
+      pkg.cachedAt.toISOString(),
+      pkg.size,
+      pkg.checksum,
+      pkg.localPath,
+      pkg.documentationPath || null,
+      pkg.examplesPath || null
+    ]);
   }
 
   /**
@@ -100,23 +99,11 @@ export class Database {
    * @returns Cached package or null if not found
    */
   async getPackage(name: string, version: string): Promise<CachedPackage | null> {
-    return new Promise((resolve, reject) => {
-      this.db.get(
-        'SELECT * FROM packages WHERE name = ? AND version = ?',
-        [name, version],
-        (err, row) => {
-          if (err) {
-            reject(err);
-            return;
-          }
-          if (!row) {
-            resolve(null);
-            return;
-          }
-          resolve(this.rowToPackage(row));
-        }
-      );
-    });
+    const row = await this.get(
+      'SELECT * FROM packages WHERE name = ? AND version = ?',
+      [name, version]
+    );
+    return row ? this.rowToPackage(row) : null;
   }
 
   /**
@@ -124,15 +111,8 @@ export class Database {
    * @returns Array of cached packages
    */
   async listPackages(): Promise<CachedPackage[]> {
-    return new Promise((resolve, reject) => {
-      this.db.all('SELECT * FROM packages ORDER BY cachedAt DESC', (err, rows) => {
-        if (err) {
-          reject(err);
-          return;
-        }
-        resolve(rows.map(row => this.rowToPackage(row)));
-      });
-    });
+    const rows = await this.all('SELECT * FROM packages ORDER BY cachedAt DESC');
+    return rows.map(row => this.rowToPackage(row));
   }
 
   /**
@@ -141,16 +121,10 @@ export class Database {
    * @param version - Package version
    */
   async removePackage(name: string, version: string): Promise<void> {
-    return new Promise((resolve, reject) => {
-      this.db.run(
-        'DELETE FROM packages WHERE name = ? AND version = ?',
-        [name, version],
-        (err) => {
-          if (err) reject(err);
-          else resolve();
-        }
-      );
-    });
+    await this.run(
+      'DELETE FROM packages WHERE name = ? AND version = ?',
+      [name, version]
+    );
   }
 
   /**
@@ -159,19 +133,11 @@ export class Database {
    * @returns Array of matching packages
    */
   async searchPackages(query: string): Promise<CachedPackage[]> {
-    return new Promise((resolve, reject) => {
-      this.db.all(
-        'SELECT * FROM packages WHERE name LIKE ? OR description LIKE ? ORDER BY name',
-        [`%${query}%`, `%${query}%`],
-        (err, rows) => {
-          if (err) {
-            reject(err);
-            return;
-          }
-          resolve(rows.map(row => this.rowToPackage(row)));
-        }
-      );
-    });
+    const rows = await this.all(
+      'SELECT * FROM packages WHERE name LIKE ? OR description LIKE ? ORDER BY name',
+      [`%${query}%`, `%${query}%`]
+    );
+    return rows.map(row => this.rowToPackage(row));
   }
 
   /**
@@ -179,25 +145,96 @@ export class Database {
    * @returns Cache statistics including total packages, size, and date range
    */
   async getStats(): Promise<{ totalPackages: number; totalSize: number; oldestCache: Date; newestCache: Date }> {
+    const row: any = await this.get(`
+      SELECT 
+        COUNT(*) as totalPackages,
+        SUM(size) as totalSize,
+        MIN(cachedAt) as oldestCache,
+        MAX(cachedAt) as newestCache
+      FROM packages
+    `);
+
+    return {
+      totalPackages: row.totalPackages || 0,
+      totalSize: row.totalSize || 0,
+      oldestCache: row.oldestCache ? new Date(row.oldestCache) : new Date(),
+      newestCache: row.newestCache ? new Date(row.newestCache) : new Date()
+    };
+  }
+
+  // Queue Management Methods
+
+  async saveQueueItem(item: QueueItem): Promise<void> {
+    const stmt = `
+      INSERT OR REPLACE INTO queue (
+        id, packageName, version, manager, priority, queuedAt, status, error, progress
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `;
+
+    await this.run(stmt, [
+      item.id,
+      item.packageName,
+      item.version,
+      item.manager,
+      item.priority,
+      item.queuedAt.toISOString(),
+      item.status,
+      item.error || null,
+      item.progress ? JSON.stringify(item.progress) : null
+    ]);
+  }
+
+  async getQueueItem(id: string): Promise<QueueItem | null> {
+    const row = await this.get('SELECT * FROM queue WHERE id = ?', [id]);
+    return row ? this.rowToQueueItem(row) : null;
+  }
+
+  async listQueueItems(): Promise<QueueItem[]> {
+    const rows = await this.all('SELECT * FROM queue ORDER BY priority DESC, queuedAt ASC');
+    return rows.map(row => this.rowToQueueItem(row));
+  }
+
+  async removeQueueItem(id: string): Promise<void> {
+    await this.run('DELETE FROM queue WHERE id = ?', [id]);
+  }
+
+  async clearQueue(): Promise<void> {
+    await this.run('DELETE FROM queue');
+  }
+
+  async clearQueueItemByPackage(packageName: string, version?: string): Promise<void> {
+    if (version) {
+      await this.run('DELETE FROM queue WHERE packageName = ? AND version = ?', [packageName, version]);
+    } else {
+      await this.run('DELETE FROM queue WHERE packageName = ?', [packageName]);
+    }
+  }
+
+  // Helper Methods
+
+  private run(sql: string, params: any[] = []): Promise<void> {
     return new Promise((resolve, reject) => {
-      this.db.get(`
-        SELECT 
-          COUNT(*) as totalPackages,
-          SUM(size) as totalSize,
-          MIN(cachedAt) as oldestCache,
-          MAX(cachedAt) as newestCache
-        FROM packages
-      `, (err, row) => {
-        if (err) {
-          reject(err);
-          return;
-        }
-        resolve({
-          totalPackages: (row as any).totalPackages || 0,
-          totalSize: (row as any).totalSize || 0,
-          oldestCache: (row as any).oldestCache ? new Date((row as any).oldestCache) : new Date(),
-          newestCache: (row as any).newestCache ? new Date((row as any).newestCache) : new Date()
-        });
+      this.db.run(sql, params, (err) => {
+        if (err) reject(err);
+        else resolve();
+      });
+    });
+  }
+
+  private get(sql: string, params: any[] = []): Promise<any> {
+    return new Promise((resolve, reject) => {
+      this.db.get(sql, params, (err, row) => {
+        if (err) reject(err);
+        else resolve(row);
+      });
+    });
+  }
+
+  private all(sql: string, params: any[] = []): Promise<any[]> {
+    return new Promise((resolve, reject) => {
+      this.db.all(sql, params, (err, rows) => {
+        if (err) reject(err);
+        else resolve(rows);
       });
     });
   }
@@ -226,6 +263,20 @@ export class Database {
       localPath: row.localPath,
       documentationPath: row.documentationPath,
       examplesPath: row.examplesPath
+    };
+  }
+
+  private rowToQueueItem(row: any): QueueItem {
+    return {
+      id: row.id,
+      packageName: row.packageName,
+      version: row.version,
+      manager: row.manager,
+      priority: row.priority,
+      queuedAt: new Date(row.queuedAt),
+      status: row.status,
+      error: row.error || undefined,
+      progress: row.progress ? JSON.parse(row.progress) : undefined
     };
   }
 

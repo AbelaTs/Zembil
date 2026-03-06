@@ -40,11 +40,9 @@ describe('Zembil Pause/Resume Integration', () => {
     await zembil.queue.add('test-package-2', '1.0.0', 'npm');
     
     // Manually set one to paused
-    const queueFile = path.join(tempDir, 'queue.json');
-    const queueData = await fs.readFile(queueFile, 'utf8');
-    const items = JSON.parse(queueData);
+    const items = await zembil.queue.list();
     items[0].status = 'paused';
-    await fs.writeFile(queueFile, JSON.stringify(items, null, 2));
+    await (zembil.queue as any).db.saveQueueItem(items[0]);
     
     const status = await zembil.queue.getStatus();
     expect(status.paused).toBe(1);
@@ -77,11 +75,9 @@ describe('Zembil Pause/Resume Integration', () => {
     await zembil.queue.add('test-package', '1.0.0', 'npm');
     
     // Manually set to paused
-    const queueFile = path.join(tempDir, 'queue.json');
-    const queueData = await fs.readFile(queueFile, 'utf8');
-    const items = JSON.parse(queueData);
+    const items = await zembil.queue.list();
     items[0].status = 'paused';
-    await fs.writeFile(queueFile, JSON.stringify(items, null, 2));
+    await (zembil.queue as any).db.saveQueueItem(items[0]);
     
     // Sync should resume paused items
     try {

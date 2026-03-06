@@ -119,29 +119,24 @@ export class NetworkUtils {
     const chunks: Buffer[] = [];
     let downloaded = 0;
 
-    const reader = (response.body as any)?.getReader();
-    if (!reader) {
-      throw new Error('Failed to get response reader');
-    }
+    // Node-fetch v2 doesn't support getReader(), we use the stream directly
+    return new Promise((resolve, reject) => {
+        response.body.on('data', (chunk) => {
+            chunks.push(chunk);
+            downloaded += chunk.length;
+            if (onProgress && total > 0) {
+                onProgress(downloaded, total);
+            }
+        });
 
-    try {
-      while (true) { // eslint-disable-line no-constant-condition
-        const { done, value } = await reader.read();
-        
-        if (done) break;
-        
-        chunks.push(Buffer.from(value));
-        downloaded += value.length;
-        
-        if (onProgress && total > 0) {
-          onProgress(downloaded, total);
-        }
-      }
-    } finally {
-      reader.releaseLock();
-    }
+        response.body.on('end', () => {
+            resolve(Buffer.concat(chunks));
+        });
 
-    return Buffer.concat(chunks);
+        response.body.on('error', (err) => {
+            reject(err);
+        });
+    });
   }
 
   private static sleep(ms: number): Promise<void> {
