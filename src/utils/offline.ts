@@ -186,7 +186,7 @@ export class OfflineUtils {
         manifest.zembil &&
         manifest.zembil.format === 'offline-package'
       );
-    } catch (error) {
+    } catch {
       return false;
     }
   }
@@ -207,7 +207,7 @@ export class OfflineUtils {
         manager: manifest.manager,
         created: manifest.created
       };
-    } catch (error) {
+    } catch {
       return null;
     }
   }

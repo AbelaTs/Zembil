@@ -66,7 +66,7 @@ export class MavenManager implements PackageManagerInterface {
     let info: any = {};
     try {
         info = this.parsePom(pomContent);
-    } catch (e) {
+    } catch {
         // Fallback for simple POMs that might fail XML parsing or be empty
         // console.warn('Failed to parse POM XML:', e);
     }
@@ -126,7 +126,7 @@ export class MavenManager implements PackageManagerInterface {
       if (response.ok) {
         return `Javadoc available at: ${javadocUrl}`;
       }
-    } catch (error) {
+    } catch {
       // Javadoc not available
     }
 

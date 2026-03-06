@@ -28,7 +28,7 @@ export class NetworkUtils {
       this.isOnline = response.ok;
       this.lastCheck = now;
       return response.ok;
-    } catch (error) {
+    } catch {
       this.isOnline = false;
       this.lastCheck = now;
       return false;
@@ -61,7 +61,7 @@ export class NetworkUtils {
         latency,
         speed
       };
-    } catch (error) {
+    } catch {
       return {
         online: false,
         latency: -1,
